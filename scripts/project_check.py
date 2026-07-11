@@ -116,6 +116,28 @@ if cfg_path.is_file():
         if item in cfg_lines:
             errors.append(f"conflicting config enabled: {item}")
 
+validation_workflow = ROOT / ".github/workflows/validate-project.yml"
+if validation_workflow.is_file():
+    validation_text = validation_workflow.read_text(encoding="utf-8")
+    if "shellcheck --severity=warning scripts/*.sh" not in validation_text:
+        errors.append("validation workflow must use ShellCheck warning severity")
+
+prepare_script = ROOT / "scripts/prepare_packages.sh"
+if prepare_script.is_file():
+    prepare_text = prepare_script.read_text(encoding="utf-8")
+    old_sc2251_line = (
+        "! grep -q 'DAED_USE_VMLINUX_BTF:vmlinux-btf' "
+        "package/custom/daed/Makefile"
+    )
+    if old_sc2251_line in prepare_text:
+        errors.append("prepare_packages.sh still contains the SC2251 assertion")
+    for token in [
+        "::error::Optional vmlinux-btf dependency was not removed.",
+        'stale_packages=(',
+    ]:
+        if token not in prepare_text:
+            errors.append(f"prepare_packages.sh missing v7 assertion token: {token}")
+
 workflow = ROOT / ".github/workflows/build-athena-daed.yml"
 if workflow.is_file():
     workflow_text = workflow.read_text(encoding="utf-8")

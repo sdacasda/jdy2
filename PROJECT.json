@@ -9,6 +9,7 @@
   "source_repo": "https://github.com/VIKINGYFY/immortalwrt.git",
   "daede_repo": "https://github.com/kenzok8/openwrt-daede.git",
   "artifact_retention_days": 14,
-  "project_version": "v6",
-  "flow_offload_policy": "module allowed; software and hardware offload disabled"
+  "project_version": "v7",
+  "flow_offload_policy": "module allowed; software and hardware offload disabled",
+  "shellcheck_policy": "warning-and-error severity only"
 }

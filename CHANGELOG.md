@@ -38,3 +38,11 @@
 - Makes `luci-app-daede` depend directly on `daed`.
 - Removes the unused optional `vmlinux-btf` package dependency.
 - Keeps integrated kernel BTF as the only supported BTF mode.
+
+## v7
+
+- Fixes ShellCheck SC2251 in `prepare_packages.sh`.
+- Replaces the standalone `! grep` assertion with an explicit `if` block.
+- Uses a Bash array for stale feed-package checks.
+- Makes CI fail only on ShellCheck warning/error severity, not info-only hints.
+- Adds targeted regression checks without misclassifying multiline conditions.

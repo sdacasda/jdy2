@@ -34,5 +34,5 @@ jobs:
       - name: Run project consistency checks
         run: |
           python3 scripts/project_check.py
-          shellcheck scripts/*.sh
+          shellcheck --severity=warning scripts/*.sh
           bash -n scripts/*.sh

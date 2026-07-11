@@ -118,10 +118,28 @@ fi
 
 test -f package/custom/daed/Makefile
 test -f package/custom/luci-app-daede/Makefile
-! grep -q 'DAED_USE_VMLINUX_BTF:vmlinux-btf' package/custom/daed/Makefile
-grep -q 'DEPENDS:=+luci-base +daed' package/custom/luci-app-daede/Makefile
-test ! -e package/feeds/luci/luci-app-dae
-test ! -e package/feeds/luci/luci-app-daed
+
+if grep -q 'DAED_USE_VMLINUX_BTF:vmlinux-btf' package/custom/daed/Makefile; then
+    echo "::error::Optional vmlinux-btf dependency was not removed."
+    exit 1
+fi
+
+if ! grep -q 'DEPENDS:=+luci-base +daed' package/custom/luci-app-daede/Makefile; then
+    echo "::error::luci-app-daede was not converted to a DAED-only dependency."
+    exit 1
+fi
+
+stale_packages=(
+    package/feeds/luci/luci-app-dae
+    package/feeds/luci/luci-app-daed
+)
+
+for stale_package in "${stale_packages[@]}"; do
+    if [ -e "$stale_package" ]; then
+        echo "::error::Stale feed package still exists: $stale_package"
+        exit 1
+    fi
+done
 
 {
     echo "DAEDE_COMMIT=$DAEDE_COMMIT"
