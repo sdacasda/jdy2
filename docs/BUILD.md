@@ -15,3 +15,8 @@ Use `build_mode=build` only after validation succeeds.
 A successful artifact must contain an RE-CS-02 sysupgrade image, manifest,
 `BUILD_INFO.txt`, `SHA256SUMS`, final `.config` and the post-flash verifier.
 Artifacts from failed runs are diagnostic only.
+## Kernel image limit
+
+The RE-CS-02 uImage must not exceed 6,291,456 bytes. Detached BTF is used to
+meet this fixed limit. Never patch the profile to `KERNEL_SIZE := 8192k`.
+

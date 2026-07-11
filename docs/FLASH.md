@@ -24,3 +24,7 @@ RESULT=READY_FOR_DAED_CONFIGURATION
 
 Never run DAED together with PassWall, OpenClash, HomeProxy or another
 transparent proxy.
+The expected BTF mode for v9 is `detached-vmlinux-btf`. It is normal for
+`/sys/kernel/btf/vmlinux` to be absent when `/usr/lib/debug/boot/vmlinux`
+exists and the verifier reports readiness.
+

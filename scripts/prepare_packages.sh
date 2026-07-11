@@ -6,6 +6,8 @@ DAEDE_REPO="${DAEDE_REPO:-https://github.com/kenzok8/openwrt-daede.git}"
 DAEDE_REF="${DAEDE_REF:-main}"
 GEODATA_REPO="${GEODATA_REPO:-https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git}"
 GEODATA_REF="${GEODATA_REF:-main}"
+VMLINUX_BTF_REPO="${VMLINUX_BTF_REPO:-https://github.com/kenzok8/vmlinux-btf.git}"
+VMLINUX_BTF_REF="${VMLINUX_BTF_REF:-main}"
 
 TMP_ROOT="$(mktemp -d)"
 trap 'rm -rf "$TMP_ROOT"' EXIT
@@ -22,8 +24,10 @@ clone_ref() {
 }
 
 clone_ref "$DAEDE_REPO" "$DAEDE_REF" "$TMP_ROOT/openwrt-daede"
+clone_ref "$VMLINUX_BTF_REPO" "$VMLINUX_BTF_REF" "$TMP_ROOT/vmlinux-btf"
 
 DAEDE_COMMIT="$(git -C "$TMP_ROOT/openwrt-daede" rev-parse HEAD)"
+VMLINUX_BTF_COMMIT="$(git -C "$TMP_ROOT/vmlinux-btf" rev-parse HEAD)"
 DAED_VERSION="$(sed -n 's/^PKG_VERSION:=//p' "$TMP_ROOT/openwrt-daede/daed/Makefile" | head -1)"
 LUCI_DAEDE_VERSION="$(sed -n 's/^PKG_VERSION:=//p' "$TMP_ROOT/openwrt-daede/luci-app-daede/Makefile" | head -1)"
 
@@ -34,38 +38,20 @@ rm -rf \
     package/custom/dae \
     package/custom/daed \
     package/custom/luci-app-daede \
+    package/custom/vmlinux-btf \
     package/feeds/*/dae \
     package/feeds/*/daed \
     package/feeds/*/luci-app-daede \
+    package/feeds/*/vmlinux-btf \
     package/feeds/luci/luci-app-dae \
     package/feeds/luci/luci-app-daed 2>/dev/null || true
 
 cp -a "$TMP_ROOT/openwrt-daede/daed" package/custom/
 cp -a "$TMP_ROOT/openwrt-daede/luci-app-daede" package/custom/
+cp -a "$TMP_ROOT/vmlinux-btf/vmlinux-btf" package/custom/
 
-# This firmware always uses integrated kernel BTF. Remove only the optional
-# vmlinux-btf package dependency to avoid a false missing-package warning.
-python3 - "$OPENWRT_DIR/package/custom/daed/Makefile" <<'PY_PATCH_DAED'
-from pathlib import Path
-import re
-import sys
-
-path = Path(sys.argv[1])
-lines = path.read_text(encoding="utf-8").splitlines()
-out = []
-
-for line in lines:
-    if "DAED_USE_VMLINUX_BTF:vmlinux-btf" in line:
-        if out:
-            out[-1] = re.sub(r"\s*\\\s*$", "", out[-1])
-        continue
-    out.append(line)
-
-text = "\n".join(out) + "\n"
-if "DAED_USE_VMLINUX_BTF:vmlinux-btf" in text:
-    raise SystemExit("failed to remove optional vmlinux-btf dependency")
-path.write_text(text, encoding="utf-8")
-PY_PATCH_DAED
+# Keep DAED's upstream conditional dependency on vmlinux-btf. This build
+# selects that backend to keep BTF data outside the 6144 KiB boot kernel.
 
 # This project is DAED-only. Replace the conditional dae/daed dependency with
 # a direct daed dependency, while leaving the LuCI source itself unchanged.
@@ -117,9 +103,10 @@ fi
 
 test -f package/custom/daed/Makefile
 test -f package/custom/luci-app-daede/Makefile
+test -f package/custom/vmlinux-btf/Makefile
 
-if grep -q 'DAED_USE_VMLINUX_BTF:vmlinux-btf' package/custom/daed/Makefile; then
-    echo "::error::Optional vmlinux-btf dependency was not removed."
+if ! grep -q 'DAED_USE_VMLINUX_BTF:vmlinux-btf' package/custom/daed/Makefile; then
+    echo "::error::DAED detached-BTF dependency is missing."
     exit 1
 fi
 
@@ -142,10 +129,12 @@ done
 
 {
     echo "DAEDE_COMMIT=$DAEDE_COMMIT"
+    echo "VMLINUX_BTF_COMMIT=$VMLINUX_BTF_COMMIT"
     echo "DAED_VERSION=$DAED_VERSION"
     echo "LUCI_DAEDE_VERSION=$LUCI_DAEDE_VERSION"
     echo "GEODATA_COMMIT=$GEODATA_COMMIT"
 } >> "$GITHUB_ENV"
 
 echo "DAED package version: $DAED_VERSION"
+echo "vmlinux-btf commit: $VMLINUX_BTF_COMMIT"
 echo "luci-app-daede version: $LUCI_DAEDE_VERSION"

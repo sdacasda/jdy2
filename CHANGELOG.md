@@ -55,3 +55,13 @@
 - Prevents package compilation before host tools, toolchain and target state exist.
 - Stops deleting the unrelated `package/feeds/video/sdl3` package.
 - Adds project checks preventing both regressions.
+## v9
+
+- Fixes RE-CS-02 `uImage.itb is too big` without enlarging the 6144 KiB kernel slot.
+- Disables main-kernel DWARF, integrated BTF and module BTF.
+- Adds `kenzok8/vmlinux-btf` as detached BTF in the root filesystem.
+- Selects `DAED_USE_VMLINUX_BTF` and keeps DAED's upstream dependency.
+- Records actual uImage size and the fixed device limit in diagnostics.
+- Updates post-flash checks to accept detached BTF.
+- Rejects unsafe attempts to change RE-CS-02 `KERNEL_SIZE` to 8192 KiB.
+

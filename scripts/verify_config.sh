@@ -9,8 +9,6 @@ required=(
     "CONFIG_BPF_TOOLCHAIN_HOST=y"
     "CONFIG_USE_LLVM_HOST=y"
     "CONFIG_DWARVES=y"
-    "CONFIG_KERNEL_DEBUG_INFO_BTF=y"
-    "CONFIG_KERNEL_DEBUG_INFO_BTF_MODULES=y"
     "CONFIG_KERNEL_KPROBES=y"
     "CONFIG_KERNEL_KPROBE_EVENTS=y"
     "CONFIG_KERNEL_XDP_SOCKETS=y"
@@ -18,7 +16,8 @@ required=(
     "CONFIG_PACKAGE_kmod-sched-bpf=y"
     "CONFIG_PACKAGE_kmod-veth=y"
     "CONFIG_PACKAGE_daed=y"
-    "CONFIG_DAED_USE_KERNEL_BTF=y"
+    "CONFIG_DAED_USE_VMLINUX_BTF=y"
+    "CONFIG_PACKAGE_vmlinux-btf=y"
     "CONFIG_PACKAGE_luci-app-daede=y"
     "CONFIG_PACKAGE_luci-app-daede_daed=y"
 )
@@ -36,6 +35,10 @@ if ! grep -qE '^CONFIG_TARGET(_DEVICE)?_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-
 fi
 
 for forbidden in \
+    "CONFIG_KERNEL_DEBUG_INFO=y" \
+    "CONFIG_KERNEL_DEBUG_INFO_BTF=y" \
+    "CONFIG_KERNEL_DEBUG_INFO_BTF_MODULES=y" \
+    "CONFIG_DAED_USE_KERNEL_BTF=y" \
     "CONFIG_PACKAGE_dae=y" \
     "CONFIG_PACKAGE_luci-app-daede_dae=y" \
     "CONFIG_PACKAGE_luci-app-passwall=y" \
@@ -57,7 +60,7 @@ fi
 
 echo "Effective DAED/BTF configuration:"
 grep -E \
-    'CONFIG_(TARGET.*jdcloud_re-cs-02|BPF_TOOLCHAIN_HOST|USE_LLVM_HOST|DWARVES|KERNEL_DEBUG_INFO_BTF|KERNEL_KPROBES|KERNEL_XDP_SOCKETS|PACKAGE_kmod-sched-bpf|PACKAGE_kmod-veth|PACKAGE_daed|DAED_USE_KERNEL_BTF|PACKAGE_luci-app-daede)' \
+    'CONFIG_(TARGET.*jdcloud_re-cs-02|BPF_TOOLCHAIN_HOST|USE_LLVM_HOST|DWARVES|KERNEL_DEBUG_INFO_BTF|KERNEL_KPROBES|KERNEL_XDP_SOCKETS|PACKAGE_kmod-sched-bpf|PACKAGE_kmod-veth|PACKAGE_daed|DAED_USE_VMLINUX_BTF|PACKAGE_vmlinux-btf|PACKAGE_luci-app-daede)' \
     "$CONFIG_FILE"
 
 echo "CONFIG VERIFICATION PASSED"

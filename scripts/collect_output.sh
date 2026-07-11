@@ -12,6 +12,18 @@ mkdir -p "$OUTPUT_DIR"
 [ -f "$GITHUB_WORKSPACE/build.log" ] && cp -f "$GITHUB_WORKSPACE/build.log" "$OUTPUT_DIR/build.log"
 cp -f "$GITHUB_WORKSPACE/scripts/verify_after_flash.sh" "$OUTPUT_DIR/verify-after-flash.sh"
 
+KERNEL_ITB="$(
+    find "$OPENWRT_DIR/build_dir" -type f \
+        -name 'jdcloud_re-cs-02-uImage.itb' -print -quit 2>/dev/null
+)"
+KERNEL_ITB_SIZE=0
+KERNEL_SLOT_LIMIT="${KERNEL_SLOT_LIMIT:-6291456}"
+
+if [ -n "$KERNEL_ITB" ] && [ -f "$KERNEL_ITB" ]; then
+    cp -f "$KERNEL_ITB" "$OUTPUT_DIR/"
+    KERNEL_ITB_SIZE="$(stat -c '%s' "$KERNEL_ITB")"
+fi
+
 TARGET_DIR="$OPENWRT_DIR/bin/targets/qualcommax/ipq60xx"
 if [ -d "$TARGET_DIR" ]; then
     find "$TARGET_DIR" -maxdepth 1 -type f \
@@ -38,6 +50,10 @@ SYSUPGRADE_COUNT="$(
     echo "bpf_headers_kernel=${BPF_HEADERS_KERNEL:-unknown}"
     echo "daede_ref=${DAEDE_REF:-unknown}"
     echo "daede_commit=${DAEDE_COMMIT:-unknown}"
+    echo "vmlinux_btf_commit=${VMLINUX_BTF_COMMIT:-unknown}"
+    echo "btf_mode=detached-vmlinux-btf"
+    echo "kernel_itb_size=$KERNEL_ITB_SIZE"
+    echo "kernel_slot_limit=$KERNEL_SLOT_LIMIT"
     echo "daed_version=${DAED_VERSION:-unknown}"
     echo "luci_daede_version=${LUCI_DAEDE_VERSION:-unknown}"
     echo "geodata_commit=${GEODATA_COMMIT:-unknown}"

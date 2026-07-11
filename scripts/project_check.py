@@ -41,8 +41,6 @@ REQUIRED_CONFIG = {
     "CONFIG_BPF_TOOLCHAIN_HOST=y",
     "CONFIG_USE_LLVM_HOST=y",
     "CONFIG_DWARVES=y",
-    "CONFIG_KERNEL_DEBUG_INFO_BTF=y",
-    "CONFIG_KERNEL_DEBUG_INFO_BTF_MODULES=y",
     "CONFIG_KERNEL_KPROBES=y",
     "CONFIG_KERNEL_KPROBE_EVENTS=y",
     "CONFIG_KERNEL_XDP_SOCKETS=y",
@@ -50,12 +48,17 @@ REQUIRED_CONFIG = {
     "CONFIG_PACKAGE_kmod-sched-bpf=y",
     "CONFIG_PACKAGE_kmod-veth=y",
     "CONFIG_PACKAGE_daed=y",
-    "CONFIG_DAED_USE_KERNEL_BTF=y",
+    "CONFIG_DAED_USE_VMLINUX_BTF=y",
+    "CONFIG_PACKAGE_vmlinux-btf=y",
     "CONFIG_PACKAGE_luci-app-daede=y",
     "CONFIG_PACKAGE_luci-app-daede_daed=y",
 }
 
 FORBIDDEN_ENABLED_CONFIG = {
+    "CONFIG_KERNEL_DEBUG_INFO=y",
+    "CONFIG_KERNEL_DEBUG_INFO_BTF=y",
+    "CONFIG_KERNEL_DEBUG_INFO_BTF_MODULES=y",
+    "CONFIG_DAED_USE_KERNEL_BTF=y",
     "CONFIG_PACKAGE_dae=y",
     "CONFIG_PACKAGE_luci-app-daede_dae=y",
     "CONFIG_PACKAGE_luci-app-passwall=y",
@@ -125,18 +128,15 @@ if validation_workflow.is_file():
 prepare_script = ROOT / "scripts/prepare_packages.sh"
 if prepare_script.is_file():
     prepare_text = prepare_script.read_text(encoding="utf-8")
-    old_sc2251_line = (
-        "! grep -q 'DAED_USE_VMLINUX_BTF:vmlinux-btf' "
-        "package/custom/daed/Makefile"
-    )
-    if old_sc2251_line in prepare_text:
-        errors.append("prepare_packages.sh still contains the SC2251 assertion")
     for token in [
-        "::error::Optional vmlinux-btf dependency was not removed.",
-        'stale_packages=(',
+        "VMLINUX_BTF_REPO",
+        "package/custom/vmlinux-btf",
+        "DAED_USE_VMLINUX_BTF:vmlinux-btf",
+        "::error::DAED detached-BTF dependency is missing.",
+        "stale_packages=(",
     ]:
         if token not in prepare_text:
-            errors.append(f"prepare_packages.sh missing v7 assertion token: {token}")
+            errors.append(f"prepare_packages.sh missing detached-BTF token: {token}")
 
 workflow = ROOT / ".github/workflows/build-athena-daed.yml"
 if workflow.is_file():
@@ -174,6 +174,7 @@ if prepare_script.is_file():
     for token in [
         "package/feeds/luci/luci-app-dae",
         "package/feeds/luci/luci-app-daed",
+        "package/custom/vmlinux-btf",
         "DAED_USE_VMLINUX_BTF:vmlinux-btf",
         "DEPENDS:=+luci-base +daed",
     ]:
@@ -214,6 +215,27 @@ if prepare_script_v8.is_file():
     if "package/feeds/video/sdl3" in prepare_text_v8:
         errors.append("prepare_packages.sh must not delete unrelated SDL3 packages")
 
+config_text_v9 = cfg_path.read_text(encoding="utf-8") if cfg_path.is_file() else ""
+for token in [
+    "# CONFIG_KERNEL_DEBUG_INFO is not set",
+    "# CONFIG_KERNEL_DEBUG_INFO_BTF is not set",
+    "CONFIG_DAED_USE_VMLINUX_BTF=y",
+    "CONFIG_PACKAGE_vmlinux-btf=y",
+]:
+    if token not in config_text_v9:
+        errors.append(f"detached-BTF configuration missing: {token}")
+
+build_workflow_v9 = ROOT / ".github/workflows/build-athena-daed.yml"
+if build_workflow_v9.is_file():
+    build_text_v9 = build_workflow_v9.read_text(encoding="utf-8")
+    for token in [
+        "VMLINUX_BTF_REPO",
+        "VMLINUX_BTF_REF",
+        "KERNEL_SLOT_LIMIT",
+        "grep -q '^KERNEL_SIZE := 6144k$'",
+    ]:
+        if token not in build_text_v9:
+            errors.append(f"v9 workflow safety token missing: {token}")
 if errors:
     print("PROJECT CHECK FAILED", file=sys.stderr)
     for error in errors:

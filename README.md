@@ -59,3 +59,15 @@ on first boot so DAED traffic is not bypassed.
 The workflow never compiles `bpf-headers` as an isolated package before the
 normal build. It invokes the top-level `world` target so OpenWrt prepares host
 tools, the cross toolchain and the target kernel before package compilation.
+## RE-CS-02 kernel-size policy
+
+RE-CS-02 has a fixed 6144 KiB kernel slot. This project does not enlarge it.
+The main kernel is built without integrated BTF; matching detached BTF is
+installed in the root filesystem by `vmlinux-btf`.
+
+Expected runtime path:
+
+```text
+/usr/lib/debug/boot/vmlinux
+```
+
