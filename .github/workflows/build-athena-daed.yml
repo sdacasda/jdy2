@@ -62,6 +62,12 @@ jobs:
       - name: Checkout clean builder
         uses: actions/checkout@v6
 
+      - name: Normalize repository scripts
+        run: |
+          sed -i 's/\r$//' scripts/*.sh
+          chmod +x scripts/*.sh
+          bash -n scripts/*.sh
+
       - name: Validate repository before building
         run: |
           python3 scripts/project_check.py
@@ -170,16 +176,16 @@ jobs:
 
       - name: Inject DAED packages
         run: |
-          scripts/prepare_packages.sh "$GITHUB_WORKSPACE/openwrt"
+          bash scripts/prepare_packages.sh "$GITHUB_WORKSPACE/openwrt"
 
       - name: Apply device configuration
         run: |
           set -euo pipefail
           cd openwrt
           sed 's/\r$//' "$GITHUB_WORKSPACE/config/athena-daed.config" > .config
-          "$GITHUB_WORKSPACE/scripts/apply_defaults.sh" "$GITHUB_WORKSPACE/openwrt"
+          bash "$GITHUB_WORKSPACE/scripts/apply_defaults.sh" "$GITHUB_WORKSPACE/openwrt"
           make defconfig
-          "$GITHUB_WORKSPACE/scripts/verify_config.sh" .config
+          bash "$GITHUB_WORKSPACE/scripts/verify_config.sh" .config
           cp .config "$GITHUB_WORKSPACE/athena-daed-final.config"
 
       - name: Verify host LLVM can emit eBPF
@@ -256,8 +262,17 @@ jobs:
         if: always()
         env:
           BUILD_RESULT: ${{ job.status }}
+          BUILD_MODE: ${{ inputs.build_mode }}
         run: |
-          scripts/collect_output.sh "$GITHUB_WORKSPACE/openwrt" "$GITHUB_WORKSPACE/output"
+          mkdir -p "$GITHUB_WORKSPACE/output"
+          {
+            echo "job_status=${{ job.status }}"
+            echo "build_mode=${{ inputs.build_mode }}"
+            echo "run_id=${{ github.run_id }}"
+            echo "run_attempt=${{ github.run_attempt }}"
+          } > "$GITHUB_WORKSPACE/output/WORKFLOW_STATUS.txt"
+
+          bash scripts/collect_output.sh             "$GITHUB_WORKSPACE/openwrt"             "$GITHUB_WORKSPACE/output"
 
       - name: Upload build artifact
         if: always()
@@ -265,7 +280,7 @@ jobs:
         with:
           name: Athena-AX6600-DAED-${{ github.run_number }}
           path: output/
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
 
       - name: Publish GitHub release

@@ -4,6 +4,7 @@ set -uo pipefail
 OPENWRT_DIR="${1:?openwrt source directory is required}"
 OUTPUT_DIR="${2:?output directory is required}"
 BUILD_RESULT="${BUILD_RESULT:-unknown}"
+BUILD_MODE="${BUILD_MODE:-unknown}"
 
 mkdir -p "$OUTPUT_DIR"
 
@@ -29,6 +30,7 @@ SYSUPGRADE_COUNT="$(
 
 {
     echo "result=$BUILD_RESULT"
+    echo "build_mode=$BUILD_MODE"
     echo "source_repo=${SOURCE_REPO:-unknown}"
     echo "source_ref=${SOURCE_REF:-unknown}"
     echo "source_commit=${SOURCE_COMMIT:-unknown}"
@@ -52,7 +54,11 @@ SYSUPGRADE_COUNT="$(
 
 ls -lh "$OUTPUT_DIR"
 
-if [ "$BUILD_RESULT" = "success" ] && [ "$SYSUPGRADE_COUNT" -lt 1 ]; then
-    echo "::error::Build reported success but no RE-CS-02 sysupgrade image was collected."
+if [ "$BUILD_RESULT" = "success" ] && [ "$BUILD_MODE" = "build" ] && [ "$SYSUPGRADE_COUNT" -lt 1 ]; then
+    echo "::error::Full build reported success but no RE-CS-02 sysupgrade image was collected."
     exit 1
+fi
+
+if [ "$BUILD_MODE" = "validate" ]; then
+    echo "Validation mode: firmware image is not expected."
 fi

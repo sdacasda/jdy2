@@ -126,7 +126,9 @@ if workflow.is_file():
         "actions/upload-artifact@v4",
         "scripts/project_check.py",
         "scripts/verify_config.sh",
-        "scripts/collect_output.sh",
+        "bash scripts/collect_output.sh",
+        "bash scripts/prepare_packages.sh",
+        "if-no-files-found: warn",
     ]:
         if token not in workflow_text:
             errors.append(f"workflow missing required token: {token}")
