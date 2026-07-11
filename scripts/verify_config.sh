@@ -8,7 +8,6 @@ required=(
     "CONFIG_TARGET_qualcommax_ipq60xx=y"
     "CONFIG_BPF_TOOLCHAIN_HOST=y"
     "CONFIG_USE_LLVM_HOST=y"
-    "CONFIG_DWARVES=y"
     "CONFIG_KERNEL_KPROBES=y"
     "CONFIG_KERNEL_KPROBE_EVENTS=y"
     "CONFIG_KERNEL_XDP_SOCKETS=y"
@@ -58,9 +57,11 @@ if grep -qxF "CONFIG_PACKAGE_kmod-nft-offload=y" "$CONFIG_FILE"; then
     echo "::notice::Runtime software/hardware flow offload is forced off by 99-athena-daed-defaults."
 fi
 
+echo "::notice::CONFIG_DWARVES is not required in detached-BTF mode; host pahole is verified separately."
+
 echo "Effective DAED/BTF configuration:"
 grep -E \
-    'CONFIG_(TARGET.*jdcloud_re-cs-02|BPF_TOOLCHAIN_HOST|USE_LLVM_HOST|DWARVES|KERNEL_DEBUG_INFO_BTF|KERNEL_KPROBES|KERNEL_XDP_SOCKETS|PACKAGE_kmod-sched-bpf|PACKAGE_kmod-veth|PACKAGE_daed|DAED_USE_VMLINUX_BTF|PACKAGE_vmlinux-btf|PACKAGE_luci-app-daede)' \
+    'CONFIG_(TARGET.*jdcloud_re-cs-02|BPF_TOOLCHAIN_HOST|USE_LLVM_HOST|KERNEL_DEBUG_INFO_BTF|KERNEL_KPROBES|KERNEL_XDP_SOCKETS|PACKAGE_kmod-sched-bpf|PACKAGE_kmod-veth|PACKAGE_daed|DAED_USE_VMLINUX_BTF|PACKAGE_vmlinux-btf|PACKAGE_luci-app-daede)' \
     "$CONFIG_FILE"
 
 echo "CONFIG VERIFICATION PASSED"

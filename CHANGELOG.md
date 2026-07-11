@@ -72,3 +72,11 @@
 - Still requires the exact effective value `6144k`; no partition-size relaxation.
 - Adds a regression check preventing the brittle grep from returning.
 
+## v11
+
+- Fixes validation failure when `make defconfig` removes `CONFIG_DWARVES=y`.
+- Removes `CONFIG_DWARVES` from the required effective configuration.
+- Keeps detached `vmlinux-btf` mode and the 6144 KiB kernel-slot policy unchanged.
+- Relies on the workflow-installed host `pahole`/`dwarves`, which is checked before the build.
+- Adds regression checks so detached-BTF mode does not require `CONFIG_DWARVES` again.
+

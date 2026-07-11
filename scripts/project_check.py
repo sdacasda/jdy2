@@ -40,7 +40,6 @@ REQUIRED_CONFIG = {
     "CONFIG_TARGET_qualcommax_ipq60xx=y",
     "CONFIG_BPF_TOOLCHAIN_HOST=y",
     "CONFIG_USE_LLVM_HOST=y",
-    "CONFIG_DWARVES=y",
     "CONFIG_KERNEL_KPROBES=y",
     "CONFIG_KERNEL_KPROBE_EVENTS=y",
     "CONFIG_KERNEL_XDP_SOCKETS=y",
@@ -242,6 +241,23 @@ if build_workflow_v9.is_file():
     build_text_v10 = build_workflow_v9.read_text(encoding="utf-8")
     if "grep -q '^KERNEL_SIZE := 6144k$'" in build_text_v10:
         errors.append("workflow still uses brittle column-1 KERNEL_SIZE matching")
+
+config_text_v11 = cfg_path.read_text(encoding="utf-8") if cfg_path.is_file() else ""
+if "CONFIG_DWARVES=y" in config_text_v11:
+    errors.append("detached-BTF config must not require CONFIG_DWARVES")
+if "# CONFIG_DWARVES is not set" not in config_text_v11:
+    errors.append("detached-BTF config must document CONFIG_DWARVES as disabled")
+
+build_workflow_v11 = ROOT / ".github/workflows/build-athena-daed.yml"
+if build_workflow_v11.is_file():
+    build_text_v11 = build_workflow_v11.read_text(encoding="utf-8")
+    for token in [
+        "dwarves file",
+        "pahole --version",
+        "for tool in clang llc llvm-dis opt llvm-strip pahole",
+    ]:
+        if token not in build_text_v11:
+            errors.append(f"host-pahole safeguard missing from workflow: {token}")
 
 if errors:
     print("PROJECT CHECK FAILED", file=sys.stderr)

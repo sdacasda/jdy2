@@ -9,7 +9,7 @@
   "source_repo": "https://github.com/VIKINGYFY/immortalwrt.git",
   "daede_repo": "https://github.com/kenzok8/openwrt-daede.git",
   "artifact_retention_days": 14,
-  "project_version": "v10",
+  "project_version": "v11",
   "flow_offload_policy": "module allowed; software and hardware offload disabled",
   "shellcheck_policy": "warning-and-error severity only",
   "build_order": "standard OpenWrt world target",
@@ -18,5 +18,6 @@
   "kernel_slot_bytes": 6291456,
   "kernel_size_policy": "never enlarge RE-CS-02 KERNEL_SIZE",
   "vmlinux_btf_repo": "https://github.com/kenzok8/vmlinux-btf.git",
-  "kernel_size_audit": "whitespace-tolerant Makefile assignment parser"
+  "kernel_size_audit": "whitespace-tolerant Makefile assignment parser",
+  "dwarves_policy": "CONFIG_DWARVES not selected; workflow-provided host pahole is verified"
 }

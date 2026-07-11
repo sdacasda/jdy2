@@ -20,3 +20,11 @@ Artifacts from failed runs are diagnostic only.
 The RE-CS-02 uImage must not exceed 6,291,456 bytes. Detached BTF is used to
 meet this fixed limit. Never patch the profile to `KERNEL_SIZE := 8192k`.
 
+## DWARVES/pahole in detached-BTF mode
+
+`CONFIG_DWARVES` is an OpenWrt host-tool selector normally retained when the
+main kernel enables debug BTF. In this project the main kernel debug/BTF options
+are intentionally disabled, so `make defconfig` may remove that symbol. The
+workflow installs and verifies the host `pahole` binary used by the detached
+`vmlinux-btf` package instead.
+
