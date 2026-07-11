@@ -13,6 +13,11 @@ on:
         required: true
         default: "main"
         type: string
+      vmlinux_btf_ref:
+        description: "kenzok8/vmlinux-btf branch, tag, or commit"
+        required: true
+        default: "main"
+        type: string
       build_mode:
         description: "Validate configuration or build firmware"
         required: true
@@ -49,6 +54,9 @@ jobs:
       SOURCE_REF: ${{ inputs.source_ref }}
       DAEDE_REPO: https://github.com/kenzok8/openwrt-daede.git
       DAEDE_REF: ${{ inputs.daede_ref }}
+      VMLINUX_BTF_REPO: https://github.com/kenzok8/vmlinux-btf.git
+      VMLINUX_BTF_REF: ${{ inputs.vmlinux_btf_ref }}
+      KERNEL_SLOT_LIMIT: "6291456"
       GEODATA_REPO: https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git
       GEODATA_REF: main
       LAN_IP: 192.168.50.1
@@ -191,6 +199,13 @@ jobs:
           grep -q 'define Device/jdcloud_re-cs-02' target/linux/qualcommax/image/ipq60xx.mk
           grep -q 'TARGET_DEVICES += jdcloud_re-cs-02' target/linux/qualcommax/image/ipq60xx.mk
 
+          DEVICE_BLOCK="$(
+            sed -n '/^define Device\/jdcloud_re-cs-02$/,/^endef$/p' \
+              target/linux/qualcommax/image/ipq60xx.mk
+          )"
+          printf '%s\n' "$DEVICE_BLOCK"
+          grep -q '^KERNEL_SIZE := 6144k$' <<<"$DEVICE_BLOCK"
+
           CONFLICTS="$(
             grep -RIlE '^(<<<<<<< |>>>>>>> )' \
               target/linux package/kernel include 2>/dev/null || true
@@ -223,7 +238,7 @@ jobs:
           path: |
             openwrt/dl
             openwrt/.ccache
-          key: athena-daed-${{ runner.os }}-${{ inputs.source_ref }}-${{ inputs.daede_ref }}-${{ hashFiles('config/athena-daed.config') }}
+          key: athena-daed-v9-${{ runner.os }}-${{ inputs.source_ref }}-${{ inputs.daede_ref }}-${{ inputs.vmlinux_btf_ref }}-${{ hashFiles('config/athena-daed.config') }}
           restore-keys: |
             athena-daed-${{ runner.os }}-
 
