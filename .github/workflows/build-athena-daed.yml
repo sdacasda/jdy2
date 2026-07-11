@@ -1,0 +1,279 @@
+name: Build Athena AX6600 DAED
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: "VIKINGYFY/immortalwrt branch, tag, or commit"
+        required: true
+        default: "main"
+        type: string
+      daede_ref:
+        description: "kenzok8/openwrt-daede branch, tag, or commit"
+        required: true
+        default: "main"
+        type: string
+      build_mode:
+        description: "Validate configuration or build firmware"
+        required: true
+        default: "validate"
+        type: choice
+        options: [validate, build]
+      compile_jobs:
+        description: "Parallel jobs; 2 is recommended"
+        required: true
+        default: "2"
+        type: choice
+        options: ["1", "2", "3"]
+      publish_release:
+        description: "Publish successful firmware to GitHub Releases"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+concurrency:
+  group: athena-daed-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: RE-CS-02 / DAED / BTF
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+
+    env:
+      SOURCE_REPO: https://github.com/VIKINGYFY/immortalwrt.git
+      SOURCE_REF: ${{ inputs.source_ref }}
+      DAEDE_REPO: https://github.com/kenzok8/openwrt-daede.git
+      DAEDE_REF: ${{ inputs.daede_ref }}
+      GEODATA_REPO: https://github.com/Openwrt-Passwall/openwrt-passwall-packages.git
+      GEODATA_REF: main
+      LAN_IP: 192.168.50.1
+      HOSTNAME: Athena-DAED
+      COMPILE_JOBS: ${{ inputs.compile_jobs }}
+      GOMAXPROCS: "2"
+      CARGO_BUILD_JOBS: "2"
+      MALLOC_ARENA_MAX: "2"
+
+    steps:
+      - name: Checkout clean builder
+        uses: actions/checkout@v6
+
+      - name: Validate repository before building
+        run: |
+          python3 scripts/project_check.py
+          bash -n scripts/*.sh
+
+      - name: Free disk and create swap
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          sudo docker image prune -af || true
+
+          FREE_GB="$(df --output=avail -BG / | tail -1 | tr -dc '0-9')"
+          if [ "${FREE_GB:-0}" -ge 20 ]; then
+            sudo fallocate -l 8G /swapfile
+          elif [ "${FREE_GB:-0}" -ge 12 ]; then
+            sudo fallocate -l 4G /swapfile
+          fi
+
+          if [ -f /swapfile ]; then
+            sudo chmod 600 /swapfile
+            sudo mkswap /swapfile
+            sudo swapon /swapfile
+          fi
+
+          sudo sysctl -w vm.swappiness=20 || true
+          free -h
+          swapon --show || true
+          df -h /
+
+      - name: Initialize ImmortalWrt build environment
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get -qq update
+          sudo apt-get -qq install -y \
+            build-essential clang llvm lld dwarves flex bison g++ gawk \
+            gcc-multilib gettext git libncurses-dev libssl-dev \
+            python3-setuptools python3-pyelftools rsync swig unzip \
+            zlib1g-dev file wget curl jq qemu-utils ccache dos2unix
+
+          sudo bash -c \
+            'bash <(curl -fsSL https://build-scripts.immortalwrt.org/init_build_environment.sh)'
+
+          sudo timedatectl set-timezone Asia/Shanghai
+
+      - name: Clone clean Athena source
+        run: |
+          set -euo pipefail
+          git init -q openwrt
+          git -C openwrt remote add origin "$SOURCE_REPO"
+          git -C openwrt fetch -q --depth=1 origin "$SOURCE_REF"
+          git -C openwrt checkout -q --detach FETCH_HEAD
+          SOURCE_COMMIT="$(git -C openwrt rev-parse HEAD)"
+          echo "SOURCE_COMMIT=$SOURCE_COMMIT" >> "$GITHUB_ENV"
+          git -C openwrt log -1 --oneline
+
+      - name: Audit upstream source
+        run: |
+          set -euo pipefail
+          cd openwrt
+
+          grep -q 'define Device/jdcloud_re-cs-02' target/linux/qualcommax/image/ipq60xx.mk
+          grep -q 'TARGET_DEVICES += jdcloud_re-cs-02' target/linux/qualcommax/image/ipq60xx.mk
+
+          CONFLICTS="$(
+            grep -RIlE '^(<<<<<<< |>>>>>>> )' \
+              target/linux package/kernel include 2>/dev/null || true
+          )"
+          if [ -n "$CONFLICTS" ]; then
+            echo "::error::Unresolved source merge conflicts:"
+            printf '%s\n' "$CONFLICTS"
+            exit 1
+          fi
+
+          git diff --check
+
+          TARGET_KERNEL="$(
+            sed -n 's/^[[:space:]]*KERNEL_PATCHVER[[:space:]]*:=[[:space:]]*//p' \
+              target/linux/qualcommax/Makefile | head -1 | tr -d '[:space:]'
+          )"
+          BPF_HEADERS_KERNEL="$(
+            sed -n 's/^[[:space:]]*PKG_PATCHVER[[:space:]]*:=[[:space:]]*//p' \
+              package/kernel/bpf-headers/Makefile | head -1 | tr -d '[:space:]'
+          )"
+
+          echo "TARGET_KERNEL=$TARGET_KERNEL" >> "$GITHUB_ENV"
+          echo "BPF_HEADERS_KERNEL=$BPF_HEADERS_KERNEL" >> "$GITHUB_ENV"
+          echo "target_kernel=$TARGET_KERNEL"
+          echo "bpf_headers_kernel=$BPF_HEADERS_KERNEL"
+
+      - name: Cache downloads and compiler cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            openwrt/dl
+            openwrt/.ccache
+          key: athena-daed-${{ runner.os }}-${{ inputs.source_ref }}-${{ inputs.daede_ref }}-${{ hashFiles('config/athena-daed.config') }}
+          restore-keys: |
+            athena-daed-${{ runner.os }}-
+
+      - name: Update feeds
+        run: |
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Inject DAED packages
+        run: |
+          scripts/prepare_packages.sh "$GITHUB_WORKSPACE/openwrt"
+
+      - name: Apply device configuration
+        run: |
+          set -euo pipefail
+          cd openwrt
+          sed 's/\r$//' "$GITHUB_WORKSPACE/config/athena-daed.config" > .config
+          "$GITHUB_WORKSPACE/scripts/apply_defaults.sh" "$GITHUB_WORKSPACE/openwrt"
+          make defconfig
+          "$GITHUB_WORKSPACE/scripts/verify_config.sh" .config
+          cp .config "$GITHUB_WORKSPACE/athena-daed-final.config"
+
+      - name: Verify host LLVM can emit eBPF
+        run: |
+          set -euo pipefail
+          for tool in clang llc llvm-dis opt llvm-strip pahole; do
+            command -v "$tool"
+          done
+
+          CLANG_MAJOR="$(
+            clang -dM -E -x c /dev/null |
+              awk '/__clang_major__/ {print $3; exit}'
+          )"
+          test -n "$CLANG_MAJOR"
+          test "$CLANG_MAJOR" -ge 12
+
+          printf 'int x;\n' |
+            clang --target=bpfel -x c -c -o /tmp/clang-bpf-test.o -
+          file /tmp/clang-bpf-test.o
+          rm -f /tmp/clang-bpf-test.o
+
+      - name: Stop after configuration validation
+        if: ${{ inputs.build_mode == 'validate' }}
+        run: |
+          echo "Validation completed. Run again with build_mode=build."
+
+      - name: Download source archives
+        if: ${{ inputs.build_mode == 'build' }}
+        run: |
+          cd openwrt
+          make download -j2
+          find dl -type f -size -1024c -delete
+
+      - name: Compile BPF headers first
+        if: ${{ inputs.build_mode == 'build' }}
+        run: |
+          set -euo pipefail
+          cd openwrt
+          make package/kernel/bpf-headers/clean
+          make package/kernel/bpf-headers/compile -j1 V=s
+
+      - name: Compile firmware
+        if: ${{ inputs.build_mode == 'build' }}
+        run: |
+          set -uo pipefail
+          cd openwrt
+
+          monitor_resources() {
+            while sleep 60; do
+              echo "===== resource heartbeat $(date -Iseconds) ====="
+              free -h || true
+              df -h / "$GITHUB_WORKSPACE" || true
+              ps -eo pid,ppid,%cpu,%mem,rss,comm --sort=-rss | head -15 || true
+            done
+          }
+
+          monitor_resources &
+          MONITOR_PID=$!
+          trap 'kill "$MONITOR_PID" 2>/dev/null || true' EXIT
+
+          set +e
+          make -j"$COMPILE_JOBS" 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+          RESULT=${PIPESTATUS[0]}
+
+          if [ "$RESULT" -ne 0 ]; then
+            echo "Parallel build failed; running one serial diagnostic pass."
+            make -j1 V=s 2>&1 | tee -a "$GITHUB_WORKSPACE/build.log"
+            RESULT=${PIPESTATUS[0]}
+          fi
+
+          exit "$RESULT"
+
+      - name: Collect firmware and diagnostics
+        if: always()
+        env:
+          BUILD_RESULT: ${{ job.status }}
+        run: |
+          scripts/collect_output.sh "$GITHUB_WORKSPACE/openwrt" "$GITHUB_WORKSPACE/output"
+
+      - name: Upload build artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Athena-AX6600-DAED-${{ github.run_number }}
+          path: output/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish GitHub release
+        if: ${{ success() && inputs.build_mode == 'build' && inputs.publish_release }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="athena-daed-$(date -u +'%Y.%m.%d')-${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" output/* \
+            --title "Athena AX6600 DAED $TAG" \
+            --notes "RE-CS-02 DAED firmware. Review BUILD_INFO.txt and SHA256SUMS before flashing."
