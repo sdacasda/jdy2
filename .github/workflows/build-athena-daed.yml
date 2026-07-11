@@ -204,7 +204,26 @@ jobs:
               target/linux/qualcommax/image/ipq60xx.mk
           )"
           printf '%s\n' "$DEVICE_BLOCK"
-          grep -q '^KERNEL_SIZE := 6144k$' <<<"$DEVICE_BLOCK"
+
+          # Device definitions are normally indented with tabs. Parse the
+          # assigned value instead of requiring KERNEL_SIZE at column 1.
+          KERNEL_SIZE_VALUE="$(
+            printf '%s\n' "$DEVICE_BLOCK" |
+              awk -F':=' '
+                /^[[:space:]]*KERNEL_SIZE[[:space:]]*:=/ {
+                  gsub(/[[:space:]]/, "", $2)
+                  print $2
+                  exit
+                }
+              '
+          )"
+
+          if [ "$KERNEL_SIZE_VALUE" != "6144k" ]; then
+            echo "::error::Unexpected RE-CS-02 KERNEL_SIZE: ${KERNEL_SIZE_VALUE:-missing}; expected 6144k."
+            exit 1
+          fi
+
+          echo "RE-CS-02 kernel slot confirmed: $KERNEL_SIZE_VALUE"
 
           CONFLICTS="$(
             grep -RIlE '^(<<<<<<< |>>>>>>> )' \

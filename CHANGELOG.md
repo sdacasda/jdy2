@@ -65,3 +65,10 @@
 - Updates post-flash checks to accept detached BTF.
 - Rejects unsafe attempts to change RE-CS-02 `KERNEL_SIZE` to 8192 KiB.
 
+## v10
+
+- Fixes the RE-CS-02 upstream audit failing on an indented `KERNEL_SIZE := 6144k`.
+- Parses the Makefile assignment value with `awk` instead of requiring column-1 text.
+- Still requires the exact effective value `6144k`; no partition-size relaxation.
+- Adds a regression check preventing the brittle grep from returning.
+

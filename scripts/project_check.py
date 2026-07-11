@@ -232,10 +232,17 @@ if build_workflow_v9.is_file():
         "VMLINUX_BTF_REPO",
         "VMLINUX_BTF_REF",
         "KERNEL_SLOT_LIMIT",
-        "grep -q '^KERNEL_SIZE := 6144k$'",
+        "KERNEL_SIZE_VALUE",
+        'awk -F\':=\'',
+        'expected 6144k',
     ]:
         if token not in build_text_v9:
             errors.append(f"v9 workflow safety token missing: {token}")
+if build_workflow_v9.is_file():
+    build_text_v10 = build_workflow_v9.read_text(encoding="utf-8")
+    if "grep -q '^KERNEL_SIZE := 6144k$'" in build_text_v10:
+        errors.append("workflow still uses brittle column-1 KERNEL_SIZE matching")
+
 if errors:
     print("PROJECT CHECK FAILED", file=sys.stderr)
     for error in errors:
