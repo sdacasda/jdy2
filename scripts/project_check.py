@@ -129,6 +129,8 @@ if workflow.is_file():
         "bash scripts/collect_output.sh",
         "bash scripts/prepare_packages.sh",
         "if-no-files-found: warn",
+        "Existing runner swap detected; no new swap file is needed.",
+        "$RUNNER_TEMP/athena-build.swap",
     ]:
         if token not in workflow_text:
             errors.append(f"workflow missing required token: {token}")

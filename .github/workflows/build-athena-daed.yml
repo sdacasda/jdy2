@@ -73,29 +73,64 @@ jobs:
           python3 scripts/project_check.py
           bash -n scripts/*.sh
 
-      - name: Free disk and create swap
+      - name: Free disk and verify swap
         run: |
           set -euo pipefail
-          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL || true
+
+          sudo rm -rf             /usr/local/lib/android             /usr/share/dotnet             /opt/ghc             /opt/hostedtoolcache/CodeQL || true
           sudo docker image prune -af || true
 
-          FREE_GB="$(df --output=avail -BG / | tail -1 | tr -dc '0-9')"
-          if [ "${FREE_GB:-0}" -ge 20 ]; then
-            sudo fallocate -l 8G /swapfile
-          elif [ "${FREE_GB:-0}" -ge 12 ]; then
-            sudo fallocate -l 4G /swapfile
-          fi
+          echo "===== Existing swap ====="
+          swapon --show || true
 
-          if [ -f /swapfile ]; then
-            sudo chmod 600 /swapfile
-            sudo mkswap /swapfile
-            sudo swapon /swapfile
+          # GitHub Ubuntu images normally already provide swap. Reuse it and
+          # never rewrite an active /swapfile, which causes ETXTBSY.
+          if [ -n "$(swapon --show --noheadings 2>/dev/null)" ]; then
+            echo "Existing runner swap detected; no new swap file is needed."
+          else
+            FREE_GB="$(df --output=avail -BG "$RUNNER_TEMP" | tail -1 | tr -dc '0-9')"
+            SWAP_GB=0
+
+            if [ "${FREE_GB:-0}" -ge 20 ]; then
+              SWAP_GB=8
+            elif [ "${FREE_GB:-0}" -ge 12 ]; then
+              SWAP_GB=4
+            elif [ "${FREE_GB:-0}" -ge 8 ]; then
+              SWAP_GB=2
+            fi
+
+            if [ "$SWAP_GB" -gt 0 ]; then
+              SWAP_FILE="$RUNNER_TEMP/athena-build.swap"
+              sudo rm -f "$SWAP_FILE"
+
+              if ! sudo fallocate -l "${SWAP_GB}G" "$SWAP_FILE"; then
+                echo "::warning::fallocate failed; falling back to dd."
+                if ! sudo dd if=/dev/zero of="$SWAP_FILE"                     bs=1M count="$((SWAP_GB * 1024))" status=progress; then
+                  echo "::warning::Unable to create fallback swap; continuing without it."
+                  sudo rm -f "$SWAP_FILE"
+                fi
+              fi
+
+              if [ -f "$SWAP_FILE" ]; then
+                sudo chmod 600 "$SWAP_FILE"
+                if sudo mkswap "$SWAP_FILE" && sudo swapon "$SWAP_FILE"; then
+                  echo "Created ${SWAP_GB}G fallback swap at $SWAP_FILE."
+                else
+                  echo "::warning::Unable to activate fallback swap; continuing."
+                  sudo rm -f "$SWAP_FILE"
+                fi
+              fi
+            else
+              echo "::warning::No existing swap and insufficient disk for fallback swap."
+            fi
           fi
 
           sudo sysctl -w vm.swappiness=20 || true
+
+          echo "===== Resources after cleanup ====="
           free -h
           swapon --show || true
-          df -h /
+          df -h / "$RUNNER_TEMP"
 
       - name: Initialize ImmortalWrt build environment
         env:
