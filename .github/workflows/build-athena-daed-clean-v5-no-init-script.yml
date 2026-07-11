@@ -132,21 +132,45 @@ jobs:
           swapon --show || true
           df -h / "$RUNNER_TEMP"
 
-      - name: Initialize ImmortalWrt build environment
+      - name: Install build dependencies without upgrading runner
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo apt-get -qq update
-          sudo apt-get -qq install -y \
-            build-essential clang llvm lld dwarves flex bison g++ gawk \
-            gcc-multilib gettext git libncurses-dev libssl-dev \
-            python3-setuptools python3-pyelftools rsync swig unzip \
-            zlib1g-dev file wget curl jq qemu-utils ccache dos2unix
+          set -euo pipefail
 
-          sudo bash -c \
-            'bash <(curl -fsSL https://build-scripts.immortalwrt.org/init_build_environment.sh)'
+          # Install only build dependencies. Keep the hosted runner's base OS,
+          # package sources, Node.js, Go, GCC and LLVM unchanged.
+          sudo apt-get -qq update
+          sudo apt-get -qq install -y --no-install-recommends \
+            ack antlr3 asciidoc autoconf automake autopoint binutils bison \
+            build-essential bzip2 ccache clang cmake cpio curl \
+            device-tree-compiler ecj fakeroot fastjar flex g++-multilib \
+            gawk gcc-multilib gettext genisoimage git gnutls-dev gperf \
+            haveged help2man intltool jq lib32gcc-s1 libc6-dev-i386 \
+            libelf-dev libglib2.0-dev libgmp3-dev libltdl-dev libmpc-dev \
+            libmpfr-dev libncurses-dev libpython3-dev libreadline-dev \
+            libssl-dev libtool libyaml-dev libz-dev lld llvm lrzsz \
+            msmtp nano ninja-build p7zip-full patch pkgconf \
+            python3 python3-docutils python3-pip python3-ply \
+            python3-pyelftools python3-setuptools qemu-utils quilt re2c \
+            rsync scons sharutils squashfs-tools subversion swig texinfo \
+            uglifyjs unzip wget xmlto xxd zlib1g-dev zstd dwarves file \
+            openssl ca-certificates
 
           sudo timedatectl set-timezone Asia/Shanghai
+
+          echo "===== Tool versions ====="
+          gcc --version | head -1
+          clang --version | head -1
+          llvm-config --version
+          pahole --version
+          python3 --version
+          git --version
+
+          echo "===== Resource state ====="
+          free -h
+          swapon --show || true
+          df -h /
 
       - name: Clone clean Athena source
         run: |
