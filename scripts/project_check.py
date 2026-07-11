@@ -190,6 +190,30 @@ if defaults_script.is_file():
         if token not in defaults_text:
             errors.append(f"apply_defaults.sh missing runtime offload safeguard: {token}")
 
+build_workflow = ROOT / ".github/workflows/build-athena-daed.yml"
+if build_workflow.is_file():
+    build_text = build_workflow.read_text(encoding="utf-8")
+    for forbidden_token in [
+        "make package/kernel/bpf-headers/compile",
+        "make package/kernel/bpf-headers/clean",
+    ]:
+        if forbidden_token in build_text:
+            errors.append(
+                f"workflow bypasses standard OpenWrt dependency order: {forbidden_token}"
+            )
+    for required_token in [
+        'make -j"$COMPILE_JOBS" world',
+        "Confirm standard OpenWrt build ordering",
+    ]:
+        if required_token not in build_text:
+            errors.append(f"workflow missing standard build token: {required_token}")
+
+prepare_script_v8 = ROOT / "scripts/prepare_packages.sh"
+if prepare_script_v8.is_file():
+    prepare_text_v8 = prepare_script_v8.read_text(encoding="utf-8")
+    if "package/feeds/video/sdl3" in prepare_text_v8:
+        errors.append("prepare_packages.sh must not delete unrelated SDL3 packages")
+
 if errors:
     print("PROJECT CHECK FAILED", file=sys.stderr)
     for error in errors:

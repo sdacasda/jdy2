@@ -53,3 +53,9 @@ The selected ImmortalWrt source installs `kmod-nft-offload` as a normal router
 default package. The module being present is not treated as an error. This
 project explicitly sets both `flow_offloading` and `flow_offloading_hw` to `0`
 on first boot so DAED traffic is not bypassed.
+
+## Build-order policy
+
+The workflow never compiles `bpf-headers` as an isolated package before the
+normal build. It invokes the top-level `world` target so OpenWrt prepares host
+tools, the cross toolchain and the target kernel before package compilation.

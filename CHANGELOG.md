@@ -46,3 +46,12 @@
 - Uses a Bash array for stale feed-package checks.
 - Makes CI fail only on ShellCheck warning/error severity, not info-only hints.
 - Adds targeted regression checks without misclassifying multiline conditions.
+
+## v8
+
+- Removes the custom `package/kernel/bpf-headers/compile` prebuild.
+- Restores the standard OpenWrt `world` dependency order.
+- Makes the full build target explicit as `make ... world`.
+- Prevents package compilation before host tools, toolchain and target state exist.
+- Stops deleting the unrelated `package/feeds/video/sdl3` package.
+- Adds project checks preventing both regressions.

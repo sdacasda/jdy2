@@ -278,13 +278,19 @@ jobs:
           make download -j2
           find dl -type f -size -1024c -delete
 
-      - name: Compile BPF headers first
+      - name: Confirm standard OpenWrt build ordering
         if: ${{ inputs.build_mode == 'build' }}
         run: |
           set -euo pipefail
           cd openwrt
-          make package/kernel/bpf-headers/clean
-          make package/kernel/bpf-headers/compile -j1 V=s
+
+          # Do not invoke individual package compile targets here. The world
+          # target must create host tools, toolchain and target state first.
+          grep -q 'world: prepare' Makefile
+          grep -q '\$(package/stamp-compile): \$(target/stamp-compile)' Makefile
+
+          echo "Using standard dependency order:"
+          echo "tools -> toolchain -> target -> packages -> images"
 
       - name: Compile firmware
         if: ${{ inputs.build_mode == 'build' }}
@@ -306,12 +312,12 @@ jobs:
           trap 'kill "$MONITOR_PID" 2>/dev/null || true' EXIT
 
           set +e
-          make -j"$COMPILE_JOBS" 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+          make -j"$COMPILE_JOBS" world 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
           RESULT=${PIPESTATUS[0]}
 
           if [ "$RESULT" -ne 0 ]; then
             echo "Parallel build failed; running one serial diagnostic pass."
-            make -j1 V=s 2>&1 | tee -a "$GITHUB_WORKSPACE/build.log"
+            make -j1 V=s world 2>&1 | tee -a "$GITHUB_WORKSPACE/build.log"
             RESULT=${PIPESTATUS[0]}
           fi
 

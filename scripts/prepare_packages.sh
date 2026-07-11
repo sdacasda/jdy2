@@ -38,8 +38,7 @@ rm -rf \
     package/feeds/*/daed \
     package/feeds/*/luci-app-daede \
     package/feeds/luci/luci-app-dae \
-    package/feeds/luci/luci-app-daed \
-    package/feeds/video/sdl3 2>/dev/null || true
+    package/feeds/luci/luci-app-daed 2>/dev/null || true
 
 cp -a "$TMP_ROOT/openwrt-daede/daed" package/custom/
 cp -a "$TMP_ROOT/openwrt-daede/luci-app-daede" package/custom/
