@@ -28,3 +28,9 @@ are intentionally disabled, so `make defconfig` may remove that symbol. The
 workflow installs and verifies the host `pahole` binary used by the detached
 `vmlinux-btf` package instead.
 
+## v12 kernel trim
+
+The boot kernel intentionally excludes tracing/profiling facilities that DAED
+does not require: BPF events, ftrace, kprobes and perf events. Networking eBPF,
+TC BPF, cgroup BPF, XDP sockets and detached BTF remain enabled.
+

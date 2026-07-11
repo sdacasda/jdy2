@@ -80,3 +80,13 @@
 - Relies on the workflow-installed host `pahole`/`dwarves`, which is checked before the build.
 - Adds regression checks so detached-BTF mode does not require `CONFIG_DWARVES` again.
 
+## v12
+
+- Addresses the remaining 70,576-byte RE-CS-02 kernel overflow.
+- Disables optional `BPF_EVENTS`, `FTRACE`, `KPROBES`, `KPROBE_EVENTS` and
+  `PERF_EVENTS` in the boot kernel.
+- Keeps DAED-required networking eBPF, cgroup BPF, stream parser, XDP sockets,
+  TC BPF modules and detached BTF.
+- Adds an explicit post-build kernel-size and remaining-margin report.
+- Does not change the physical `KERNEL_SIZE := 6144k` device limit.
+

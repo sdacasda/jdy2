@@ -357,6 +357,31 @@ jobs:
 
           exit "$RESULT"
 
+      - name: Report RE-CS-02 kernel image size
+        if: always()
+        run: |
+          set -euo pipefail
+          IMAGE="$(
+            find "$GITHUB_WORKSPACE/openwrt/build_dir" -type f               -name 'jdcloud_re-cs-02-uImage.itb' -print -quit 2>/dev/null || true
+          )"
+
+          if [ -n "$IMAGE" ] && [ -f "$IMAGE" ]; then
+            SIZE="$(stat -c '%s' "$IMAGE")"
+            LIMIT=6291456
+            MARGIN="$((LIMIT - SIZE))"
+            echo "uImage.itb size: $SIZE bytes"
+            echo "kernel slot:    $LIMIT bytes"
+            echo "margin:         $MARGIN bytes"
+
+            if [ "$SIZE" -gt "$LIMIT" ]; then
+              echo "::error::RE-CS-02 kernel is oversized by $((-MARGIN)) bytes."
+            else
+              echo "::notice::RE-CS-02 kernel fits with $MARGIN bytes remaining."
+            fi
+          else
+            echo "::notice::No RE-CS-02 uImage.itb was produced."
+          fi
+
       - name: Collect firmware and diagnostics
         if: always()
         env:

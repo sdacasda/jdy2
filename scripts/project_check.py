@@ -40,8 +40,6 @@ REQUIRED_CONFIG = {
     "CONFIG_TARGET_qualcommax_ipq60xx=y",
     "CONFIG_BPF_TOOLCHAIN_HOST=y",
     "CONFIG_USE_LLVM_HOST=y",
-    "CONFIG_KERNEL_KPROBES=y",
-    "CONFIG_KERNEL_KPROBE_EVENTS=y",
     "CONFIG_KERNEL_XDP_SOCKETS=y",
     "CONFIG_PACKAGE_kmod-sched-core=y",
     "CONFIG_PACKAGE_kmod-sched-bpf=y",
@@ -54,6 +52,11 @@ REQUIRED_CONFIG = {
 }
 
 FORBIDDEN_ENABLED_CONFIG = {
+    "CONFIG_KERNEL_BPF_EVENTS=y",
+    "CONFIG_KERNEL_FTRACE=y",
+    "CONFIG_KERNEL_KPROBES=y",
+    "CONFIG_KERNEL_KPROBE_EVENTS=y",
+    "CONFIG_KERNEL_PERF_EVENTS=y",
     "CONFIG_KERNEL_DEBUG_INFO=y",
     "CONFIG_KERNEL_DEBUG_INFO_BTF=y",
     "CONFIG_KERNEL_DEBUG_INFO_BTF_MODULES=y",
@@ -258,6 +261,17 @@ if build_workflow_v11.is_file():
     ]:
         if token not in build_text_v11:
             errors.append(f"host-pahole safeguard missing from workflow: {token}")
+
+config_text_v12 = cfg_path.read_text(encoding="utf-8") if cfg_path.is_file() else ""
+for token in [
+    "# CONFIG_KERNEL_BPF_EVENTS is not set",
+    "# CONFIG_KERNEL_FTRACE is not set",
+    "# CONFIG_KERNEL_KPROBES is not set",
+    "# CONFIG_KERNEL_KPROBE_EVENTS is not set",
+    "# CONFIG_KERNEL_PERF_EVENTS is not set",
+]:
+    if token not in config_text_v12:
+        errors.append(f"kernel-size safeguard missing: {token}")
 
 if errors:
     print("PROJECT CHECK FAILED", file=sys.stderr)
