@@ -48,7 +48,7 @@ SYSUPGRADE_COUNT="$(
 } > "$OUTPUT_DIR/BUILD_INFO.txt"
 
 (
-    cd "$OUTPUT_DIR"
+    cd "$OUTPUT_DIR" || exit 1
     sha256sum ./* 2>/dev/null | grep -v 'SHA256SUMS$' > SHA256SUMS || true
 )
 
