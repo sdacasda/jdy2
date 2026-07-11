@@ -41,3 +41,15 @@ From an existing OpenWrt/ImmortalWrt/LibWrt system, use only:
 For the first migration, do not preserve the old configuration.
 
 See `docs/BUILD.md`, `docs/FLASH.md`, and `docs/UPDATE.md`.
+
+
+## GitHub runner safety
+
+This project does not use the remote ImmortalWrt environment initializer. It installs build dependencies directly and leaves the hosted runner base operating system and package sources intact.
+
+## Flow-offload policy
+
+The selected ImmortalWrt source installs `kmod-nft-offload` as a normal router
+default package. The module being present is not treated as an error. This
+project explicitly sets both `flow_offloading` and `flow_offloading_hw` to `0`
+on first boot so DAED traffic is not bypassed.

@@ -63,7 +63,6 @@ FORBIDDEN_ENABLED_CONFIG = {
     "CONFIG_PACKAGE_luci-app-openclash=y",
     "CONFIG_PACKAGE_luci-app-homeproxy=y",
     "CONFIG_PACKAGE_kmod-qca-nss-ecm=y",
-    "CONFIG_PACKAGE_kmod-nft-offload=y",
 }
 
 errors: list[str] = []
@@ -131,9 +130,43 @@ if workflow.is_file():
         "if-no-files-found: warn",
         "Existing runner swap detected; no new swap file is needed.",
         "$RUNNER_TEMP/athena-build.swap",
+        "Install build dependencies without upgrading runner",
+        "--no-install-recommends",
     ]:
         if token not in workflow_text:
             errors.append(f"workflow missing required token: {token}")
+
+
+    for forbidden_token in [
+        "init_build_environment.sh",
+        "apt full-upgrade",
+        "apt-get full-upgrade",
+        "build-scripts.immortalwrt.org",
+    ]:
+        if forbidden_token in workflow_text:
+            errors.append(f"destructive/external runner initializer found: {forbidden_token}")
+
+prepare_script = ROOT / "scripts/prepare_packages.sh"
+if prepare_script.is_file():
+    prepare_text = prepare_script.read_text(encoding="utf-8")
+    for token in [
+        "package/feeds/luci/luci-app-dae",
+        "package/feeds/luci/luci-app-daed",
+        "DAED_USE_VMLINUX_BTF:vmlinux-btf",
+        "DEPENDS:=+luci-base +daed",
+    ]:
+        if token not in prepare_text:
+            errors.append(f"prepare_packages.sh missing required DAED-only patch token: {token}")
+
+defaults_script = ROOT / "scripts/apply_defaults.sh"
+if defaults_script.is_file():
+    defaults_text = defaults_script.read_text(encoding="utf-8")
+    for token in [
+        "flow_offloading='0'",
+        "flow_offloading_hw='0'",
+    ]:
+        if token not in defaults_text:
+            errors.append(f"apply_defaults.sh missing runtime offload safeguard: {token}")
 
 if errors:
     print("PROJECT CHECK FAILED", file=sys.stderr)

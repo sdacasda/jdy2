@@ -42,14 +42,18 @@ for forbidden in \
     "CONFIG_PACKAGE_luci-app-passwall2=y" \
     "CONFIG_PACKAGE_luci-app-openclash=y" \
     "CONFIG_PACKAGE_luci-app-homeproxy=y" \
-    "CONFIG_PACKAGE_kmod-qca-nss-ecm=y" \
-    "CONFIG_PACKAGE_kmod-nft-offload=y"
+    "CONFIG_PACKAGE_kmod-qca-nss-ecm=y"
 do
     if grep -qxF "$forbidden" "$CONFIG_FILE"; then
         echo "::error::Conflicting setting enabled: $forbidden"
         exit 1
     fi
 done
+
+if grep -qxF "CONFIG_PACKAGE_kmod-nft-offload=y" "$CONFIG_FILE"; then
+    echo "::notice::kmod-nft-offload is installed by the router target profile."
+    echo "::notice::Runtime software/hardware flow offload is forced off by 99-athena-daed-defaults."
+fi
 
 echo "Effective DAED/BTF configuration:"
 grep -E \

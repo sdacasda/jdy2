@@ -21,3 +21,20 @@
 - Falls back from `fallocate` to `dd`.
 - Treats optional swap creation failure as a warning rather than a build failure.
 
+## v5
+
+- Removes the external ImmortalWrt environment initializer.
+- Avoids whole-runner operating-system upgrades and APT-source rewrites.
+- Does not replace GitHub runner Node.js, Go, GCC or LLVM binaries.
+- Installs only the documented build dependencies with APT.
+- Prints tool versions before cloning and building.
+- Adds a project check preventing the external initializer from returning.
+
+## v6
+
+- Stops treating target-default `kmod-nft-offload` as a configuration conflict.
+- Explicitly disables software and hardware flow offload at first boot.
+- Removes unused legacy LuCI dae/daed feed packages from the build tree.
+- Makes `luci-app-daede` depend directly on `daed`.
+- Removes the unused optional `vmlinux-btf` package dependency.
+- Keeps integrated kernel BTF as the only supported BTF mode.
