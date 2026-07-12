@@ -157,7 +157,8 @@ jobs:
           set -euo pipefail
           cp "$GITHUB_WORKSPACE/config/athena-minimal.config" .config
           make defconfig
-          bash "$GITHUB_WORKSPACE/scripts/verify_config.sh" .config
+          bash "$GITHUB_WORKSPACE/scripts/verify_config.sh" \
+            .config package/custom/daed/Makefile
           ./scripts/diffconfig.sh
 
       - name: Download build sources

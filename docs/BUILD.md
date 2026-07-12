@@ -30,3 +30,12 @@ DAED uses CO-RE eBPF and needs matching kernel BTF. The boot kernel has a fixed 
 ## Why NSS remains but acceleration is disabled
 
 The known-good LiBwrt source uses NSS device drivers. Removing that baseline would increase boot risk. The first-boot defaults retain the drivers but disable optional ECM/SFE forwarding services and LuCI flow-offload flags so DAED can see traffic.
+
+## LiBwrt package-choice compatibility
+
+The upstream DAED package exposes an optional BTF-source choice. On the pinned
+LiBwrt source, `make defconfig` removes `CONFIG_DAED_USE_VMLINUX_BTF`. Since this
+appliance always uses detached BTF, `scripts/patch_daed_btf.py` removes that
+choice from the copied package definition and changes the dependency to a
+direct `+vmlinux-btf`. This does not enable integrated kernel BTF.
+

@@ -1,6 +1,6 @@
 {
   "project": "Athena AX6600 Minimal DAED",
-  "project_version": "v13",
+  "project_version": "v14",
   "device": "JDCloud RE-CS-02",
   "board": "jdcloud,re-cs-02",
   "target": "qualcommax/ipq60xx",
@@ -18,5 +18,7 @@
     "NSS device baseline",
     "initramfs test image"
   ],
-  "safety_policy": "Test initramfs from U-Boot RAM before sysupgrade"
+  "safety_policy": "Test initramfs from U-Boot RAM before sysupgrade",
+  "btf_selection": "DAED Makefile patched to unconditional vmlinux-btf dependency",
+  "resolved_issue": "LiBwrt defconfig removes CONFIG_DAED_USE_VMLINUX_BTF"
 }

@@ -3,6 +3,7 @@ set -euo pipefail
 
 TOPDIR="${1:?usage: prepare_packages.sh OPENWRT_TOPDIR}"
 TOPDIR="$(cd "$TOPDIR" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CUSTOM="$TOPDIR/package/custom"
 WORK="$TOPDIR/.package-sources"
 
@@ -43,6 +44,17 @@ echo "Preparing DAED packages..."
 clone_ref "$DAEDE_REPO" "$DAEDE_REF" "$WORK/openwrt-daede"
 cp -a "$WORK/openwrt-daede/daed" "$CUSTOM/daed"
 cp -a "$WORK/openwrt-daede/luci-app-daede" "$CUSTOM/luci-app-daede"
+
+# LiBwrt's defconfig drops the optional DAED_USE_* package-choice symbol.
+# This appliance always uses detached BTF, so make vmlinux-btf a direct,
+# unconditional dependency and remove the unused package choice.
+python3 "$SCRIPT_DIR/patch_daed_btf.py" "$CUSTOM/daed/Makefile"
+grep -Fq '+vmlinux-btf' "$CUSTOM/daed/Makefile"
+if grep -q 'DAED_USE_' "$CUSTOM/daed/Makefile"; then
+    echo "::error::DAED BTF choice symbols remain after patching."
+    exit 1
+fi
+
 record_commit DAEDE_COMMIT "$WORK/openwrt-daede"
 
 echo "Preparing detached BTF package..."

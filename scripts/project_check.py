@@ -14,6 +14,7 @@ required_files = [
     ".github/workflows/validate-project.yml",
     "config/athena-minimal.config",
     "scripts/prepare_packages.sh",
+    "scripts/patch_daed_btf.py",
     "scripts/apply_defaults.sh",
     "scripts/verify_config.sh",
     "scripts/collect_output.sh",
@@ -48,7 +49,6 @@ required_config = {
     "CONFIG_PACKAGE_luci-app-daede_daed=y",
     "CONFIG_PACKAGE_kmod-sched-bpf=y",
     "CONFIG_KERNEL_XDP_SOCKETS=y",
-    "CONFIG_DAED_USE_VMLINUX_BTF=y",
     "CONFIG_PACKAGE_vmlinux-btf=y",
     "CONFIG_PACKAGE_luci-app-athena-led=y",
 }
@@ -58,6 +58,7 @@ for token in sorted(required_config):
         errors.append(f"missing config safeguard: {token}")
 
 for forbidden in [
+    "CONFIG_DAED_USE_VMLINUX_BTF=y",
     "CONFIG_KERNEL_DEBUG_INFO_BTF=y",
     "CONFIG_DAED_USE_KERNEL_BTF=y",
     "CONFIG_PACKAGE_luci-app-openclash=y",
@@ -83,6 +84,26 @@ for token in [
 ]:
     if token not in workflow:
         errors.append(f"workflow safeguard missing: {token}")
+
+prepare_path = ROOT / "scripts/prepare_packages.sh"
+prepare_text = prepare_path.read_text(encoding="utf-8") if prepare_path.is_file() else ""
+for token in [
+    "patch_daed_btf.py",
+    "grep -Fq '+vmlinux-btf'",
+    "grep -q 'DAED_USE_'",
+]:
+    if token not in prepare_text:
+        errors.append(f"detached-BTF package patch safeguard missing: {token}")
+
+patcher_path = ROOT / "scripts/patch_daed_btf.py"
+patcher_text = patcher_path.read_text(encoding="utf-8") if patcher_path.is_file() else ""
+for token in [
+    "+DAED_USE_VMLINUX_BTF:vmlinux-btf",
+    "+vmlinux-btf",
+    "define Package/daed/config",
+]:
+    if token not in patcher_text:
+        errors.append(f"DAED patcher safeguard missing: {token}")
 
 for old_source in [
     "VIKINGYFY/immortalwrt",

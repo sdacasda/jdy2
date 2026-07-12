@@ -1,4 +1,4 @@
-# Athena AX6600 Minimal DAED — LiBwrt v13
+# Athena AX6600 Minimal DAED — LiBwrt v14
 
 这是给京东云雅典娜 AX6600（JDCloud RE-CS-02）准备的极简固件编译项目。
 
@@ -43,3 +43,11 @@
 7. RAM 测试完全稳定后，才使用 `*sysupgrade.bin`，并且不保留设置。
 
 详细步骤见 `docs/FLASH.md`。
+
+
+## v14 detached-BTF compatibility fix
+
+LiBwrt removes the optional `CONFIG_DAED_USE_VMLINUX_BTF` package-choice
+symbol during `make defconfig`. The project now patches the copied DAED package
+definition so `vmlinux-btf` is a direct dependency. The final firmware still
+uses detached BTF; only the unreliable package-choice symbol is removed.

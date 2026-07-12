@@ -14,3 +14,10 @@ The local project generator validated:
 - ZIP integrity.
 
 This is a static project validation. A complete GitHub cloud build and an RE-CS-02 RAM boot remain required before persistent flashing.
+
+## v14 regression guard
+
+A synthetic copy of the current upstream DAED BTF choice was patched locally.
+Validation confirms that the conditional dependency and both `DAED_USE_*`
+symbols are removed and that `+vmlinux-btf` remains.
+
