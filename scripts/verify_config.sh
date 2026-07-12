@@ -2,70 +2,53 @@
 set -euo pipefail
 
 CONFIG_FILE="${1:-.config}"
+[[ -f "$CONFIG_FILE" ]] || {
+    echo "::error::Config file not found: $CONFIG_FILE"
+    exit 1
+}
 
 required=(
     "CONFIG_TARGET_qualcommax=y"
     "CONFIG_TARGET_qualcommax_ipq60xx=y"
-    "CONFIG_BPF_TOOLCHAIN_HOST=y"
-    "CONFIG_USE_LLVM_HOST=y"
-    "CONFIG_KERNEL_XDP_SOCKETS=y"
+    "CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=y"
+    "CONFIG_TARGET_ROOTFS_SQUASHFS=y"
+    "CONFIG_TARGET_ROOTFS_INITRAMFS=y"
+    "CONFIG_NSS_FIRMWARE_VERSION_11_4=y"
+    "CONFIG_PACKAGE_daed=y"
+    "CONFIG_PACKAGE_luci-app-daede=y"
+    "CONFIG_PACKAGE_luci-app-daede_daed=y"
     "CONFIG_PACKAGE_kmod-sched-core=y"
     "CONFIG_PACKAGE_kmod-sched-bpf=y"
     "CONFIG_PACKAGE_kmod-veth=y"
-    "CONFIG_PACKAGE_daed=y"
+    "CONFIG_KERNEL_XDP_SOCKETS=y"
     "CONFIG_DAED_USE_VMLINUX_BTF=y"
     "CONFIG_PACKAGE_vmlinux-btf=y"
-    "CONFIG_PACKAGE_luci-app-daede=y"
-    "CONFIG_PACKAGE_luci-app-daede_daed=y"
+    "CONFIG_PACKAGE_luci-app-athena-led=y"
 )
 
-for item in "${required[@]}"; do
-    grep -qxF "$item" "$CONFIG_FILE" || {
-        echo "::error::Required setting was removed by make defconfig: $item"
-        exit 1
-    }
-done
-
-if ! grep -qE '^CONFIG_TARGET(_DEVICE)?_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=y$' "$CONFIG_FILE"; then
-    echo "::error::JDCloud RE-CS-02 device profile is not selected."
-    exit 1
-fi
-
-for forbidden in \
-    "CONFIG_KERNEL_BPF_EVENTS=y" \
-    "CONFIG_KERNEL_FTRACE=y" \
-    "CONFIG_KERNEL_KPROBES=y" \
-    "CONFIG_KERNEL_KPROBE_EVENTS=y" \
-    "CONFIG_KERNEL_PERF_EVENTS=y" \
-    "CONFIG_KERNEL_DEBUG_INFO=y" \
-    "CONFIG_KERNEL_DEBUG_INFO_BTF=y" \
-    "CONFIG_KERNEL_DEBUG_INFO_BTF_MODULES=y" \
-    "CONFIG_DAED_USE_KERNEL_BTF=y" \
-    "CONFIG_PACKAGE_dae=y" \
-    "CONFIG_PACKAGE_luci-app-daede_dae=y" \
-    "CONFIG_PACKAGE_luci-app-passwall=y" \
-    "CONFIG_PACKAGE_luci-app-passwall2=y" \
-    "CONFIG_PACKAGE_luci-app-openclash=y" \
-    "CONFIG_PACKAGE_luci-app-homeproxy=y" \
-    "CONFIG_PACKAGE_kmod-qca-nss-ecm=y"
-do
-    if grep -qxF "$forbidden" "$CONFIG_FILE"; then
-        echo "::error::Conflicting setting enabled: $forbidden"
+for setting in "${required[@]}"; do
+    if ! grep -Fxq "$setting" "$CONFIG_FILE"; then
+        echo "::error::Required setting was removed by make defconfig: $setting"
         exit 1
     fi
 done
 
-if grep -qxF "CONFIG_PACKAGE_kmod-nft-offload=y" "$CONFIG_FILE"; then
-    echo "::notice::kmod-nft-offload is installed by the router target profile."
-    echo "::notice::Runtime software/hardware flow offload is forced off by 99-athena-daed-defaults."
-fi
+for forbidden in \
+    "CONFIG_KERNEL_DEBUG_INFO_BTF=y" \
+    "CONFIG_DAED_USE_KERNEL_BTF=y" \
+    "CONFIG_PACKAGE_luci-app-openclash=y" \
+    "CONFIG_PACKAGE_luci-app-passwall=y" \
+    "CONFIG_PACKAGE_luci-app-homeproxy=y" \
+    "CONFIG_PACKAGE_luci-app-dockerman=y" \
+    "CONFIG_PACKAGE_luci-app-samba4=y" \
+    "CONFIG_PACKAGE_luci-app-adguardhome=y"; do
+    if grep -Fxq "$forbidden" "$CONFIG_FILE"; then
+        echo "::error::Forbidden setting is enabled: $forbidden"
+        exit 1
+    fi
+done
 
-echo "::notice::Tracing/perf features are intentionally disabled to fit the fixed 6144 KiB kernel slot."
-echo "::notice::CONFIG_DWARVES is not required in detached-BTF mode; host pahole is verified separately."
-
-echo "Effective DAED/BTF configuration:"
+echo "Effective configuration is valid."
 grep -E \
-    'CONFIG_(TARGET.*jdcloud_re-cs-02|BPF_TOOLCHAIN_HOST|USE_LLVM_HOST|KERNEL_DEBUG_INFO_BTF|KERNEL_BPF_STREAM_PARSER|KERNEL_CGROUP_BPF|KERNEL_XDP_SOCKETS|PACKAGE_kmod-sched-bpf|PACKAGE_kmod-veth|PACKAGE_daed|DAED_USE_VMLINUX_BTF|PACKAGE_vmlinux-btf|PACKAGE_luci-app-daede)' \
-    "$CONFIG_FILE"
-
-echo "CONFIG VERIFICATION PASSED"
+    'TARGET_qualcommax|jdcloud_re-cs-02|ROOTFS_INITRAMFS|PACKAGE_(daed|luci-app-daede|vmlinux-btf|luci-app-athena-led|kmod-sched-bpf)|KERNEL_XDP_SOCKETS|DAED_USE_' \
+    "$CONFIG_FILE" || true

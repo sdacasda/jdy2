@@ -1,73 +1,45 @@
-# Athena AX6600 DAED Clean Builder
+# Athena AX6600 Minimal DAED — LiBwrt v13
 
-A clean GitHub Actions project for **JDCloud Athena AX6600 / RE-CS-02** with:
+这是给京东云雅典娜 AX6600（JDCloud RE-CS-02）准备的极简固件编译项目。
 
-- DAED full visual dashboard;
-- `luci-app-daede`;
-- integrated kernel BTF;
-- required eBPF modules;
-- Athena LED support;
-- Qualcomm NSS base drivers;
-- no competing transparent-proxy stack or NSS ECM.
+## 核心原则
 
-## Create a new repository
+- 使用已经在用户设备上验证可启动的 LiBwrt 6.12 基线。
+- 源码固定到 `cf9444c1b20458687898489b36e1aebf56d9baf2`。
+- 只重点内置 DAED、LuCI 管理和雅典娜点阵屏。
+- 保留设备所需 NSS、无线、网络基础能力。
+- 不集成 OpenClash、PassWall、HomeProxy、Docker、Samba 等大型插件。
+- BTF 使用 rootfs 中的 `vmlinux-btf`，不把调试 BTF 塞入 6 MiB HLOS。
+- 同时生成 initramfs RAM 测试镜像与 sysupgrade 固件。
 
-Do not upload this project over the old `jdy` repository.
+## 第一次运行
 
-1. Create a new empty public GitHub repository.
-2. Extract this ZIP locally.
-3. Upload all files and hidden directories, including `.github`.
-4. Run **Actions → Validate clean project**.
-5. Run **Actions → Build Athena AX6600 DAED** with `build_mode=validate`.
-6. After validation succeeds, rerun with `build_mode=build`.
+上传整个项目到新的 GitHub 仓库。
 
-Default inputs:
+先运行：
 
-```text
-source_ref: main
-daede_ref: main
-compile_jobs: 2
-publish_release: false
-```
+`Actions → Validate Athena Minimal Project → Run workflow`
 
-## Flash file
+然后运行主工作流，第一次选择：
 
-From an existing OpenWrt/ImmortalWrt/LibWrt system, use only:
+- `build_mode`: `validate`
+- `compile_jobs`: `2`
 
-```text
-*jdcloud_re-cs-02*sysupgrade.bin
-```
+验证成功后再新建一次运行：
 
-For the first migration, do not preserve the old configuration.
+- `build_mode`: `build`
+- `compile_jobs`: `2`
 
-See `docs/BUILD.md`, `docs/FLASH.md`, and `docs/UPDATE.md`.
+## 强制安全顺序
 
+上一次其他源码线固件曾出现循环重启，所以本项目禁止直接把第一次产物刷入 eMMC。
 
-## GitHub runner safety
+1. 下载 Artifact 并解压。
+2. 进入已安装的自定义 U-Boot Web。
+3. 在“启动 uImage / initramfs”页面上传 `*initramfs-uImage.itb`。
+4. 该镜像只在内存中启动，不应先覆盖当前稳定固件。
+5. 检查 LAN、Wi‑Fi、LuCI、显示屏和 BTF。
+6. 重启后应回到原有稳定 LibWrt。
+7. RAM 测试完全稳定后，才使用 `*sysupgrade.bin`，并且不保留设置。
 
-This project does not use the remote ImmortalWrt environment initializer. It installs build dependencies directly and leaves the hosted runner base operating system and package sources intact.
-
-## Flow-offload policy
-
-The selected ImmortalWrt source installs `kmod-nft-offload` as a normal router
-default package. The module being present is not treated as an error. This
-project explicitly sets both `flow_offloading` and `flow_offloading_hw` to `0`
-on first boot so DAED traffic is not bypassed.
-
-## Build-order policy
-
-The workflow never compiles `bpf-headers` as an isolated package before the
-normal build. It invokes the top-level `world` target so OpenWrt prepares host
-tools, the cross toolchain and the target kernel before package compilation.
-## RE-CS-02 kernel-size policy
-
-RE-CS-02 has a fixed 6144 KiB kernel slot. This project does not enlarge it.
-The main kernel is built without integrated BTF; matching detached BTF is
-installed in the root filesystem by `vmlinux-btf`.
-
-Expected runtime path:
-
-```text
-/usr/lib/debug/boot/vmlinux
-```
-
+详细步骤见 `docs/FLASH.md`。

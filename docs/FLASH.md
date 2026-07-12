@@ -1,30 +1,50 @@
-# Flash and acceptance guide
+# Flash and recovery
 
-Before flashing:
+## Do not begin with sysupgrade
 
-- confirm RE-CS-02;
-- back up calibration/ART and network settings;
-- prepare U-Boot or TTL recovery;
-- verify SHA256;
-- select the RE-CS-02 sysupgrade image;
-- disable “keep settings” for the first migration.
+Use the generated initramfs image first:
 
-Default address:
+`*jdcloud_re-cs-02*initramfs*uImage.itb`
 
-```text
-http://192.168.50.1
+Load it through the custom U-Boot Web “boot uImage” page. An initramfs RAM boot is the validation gate after the earlier boot-loop incident.
+
+## Checks during RAM boot
+
+SSH into the temporary system and run:
+
+```sh
+sh /verify-after-flash.sh
 ```
 
-After flashing, upload and run `verify-after-flash.sh`. Do not enable DAED unless
-it prints:
+Or copy/run `verify-after-flash.sh` from the Artifact.
 
-```text
-RESULT=READY_FOR_DAED_CONFIGURATION
+Also check:
+
+```sh
+ubus call system board
+ip -br addr
+wifi status
+ls -lh /usr/lib/debug/boot/vmlinux
+opkg list-installed | grep -E 'daed|daede|vmlinux-btf|athena-led|sched-bpf'
 ```
 
-Never run DAED together with PassWall, OpenClash, HomeProxy or another
-transparent proxy.
-The expected BTF mode for v9 is `detached-vmlinux-btf`. It is normal for
-`/sys/kernel/btf/vmlinux` to be absent when `/usr/lib/debug/boot/vmlinux`
-exists and the verifier reports readiness.
+Open LuCI at `192.168.1.1`. DAED is intentionally disabled until configured.
 
+## Persistent installation
+
+Only after the RAM image remains stable:
+
+1. Reboot to the current known-good installed LibWrt.
+2. Open LuCI firmware upgrade.
+3. Upload only `*jdcloud_re-cs-02*squashfs-sysupgrade.bin`.
+4. Do not keep settings.
+5. Do not force the flash if the compatibility check rejects the image.
+6. Never upload the GitHub Artifact ZIP itself.
+
+## Kernel partition
+
+Both physical `HLOS` and `HLOS_1` are 6 MiB. The workflow enforces the same `6144k` source limit. Do not change it to 8 MiB merely to make a build pass.
+
+## Recovery
+
+Keep the custom U-Boot available. A failed initramfs test requires no eMMC restoration: power-cycle to return to the installed firmware. A failed persistent flash should be recovered with a previously known-good RE-CS-02 sysupgrade or a known-good initramfs.

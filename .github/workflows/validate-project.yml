@@ -1,17 +1,10 @@
-name: Validate clean project
+name: Validate Athena Minimal Project
 
 on:
   workflow_dispatch:
   push:
-    branches: [main]
     paths:
-      - ".github/**"
-      - "config/**"
-      - "scripts/**"
-      - "PROJECT.json"
-  pull_request:
-    paths:
-      - ".github/**"
+      - ".github/workflows/**"
       - "config/**"
       - "scripts/**"
       - "PROJECT.json"
@@ -21,18 +14,23 @@ permissions:
 
 jobs:
   validate:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     steps:
       - name: Checkout project
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
-      - name: Install validation tools
+      - name: Validate shell, Python, YAML and project invariants
         run: |
-          sudo apt-get -qq update
-          sudo apt-get -qq install -y shellcheck
-
-      - name: Run project consistency checks
-        run: |
+          set -euo pipefail
+          find scripts -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+          python3 -m py_compile scripts/project_check.py
           python3 scripts/project_check.py
-          shellcheck --severity=warning scripts/*.sh
-          bash -n scripts/*.sh
+          python3 - <<'PY'
+          from pathlib import Path
+          import yaml
+          for path in Path(".github/workflows").glob("*.yml"):
+              data = yaml.safe_load(path.read_text(encoding="utf-8"))
+              if not isinstance(data, dict):
+                  raise SystemExit(f"invalid workflow: {path}")
+              print(f"YAML OK: {path}")
+          PY

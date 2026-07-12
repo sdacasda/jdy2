@@ -1,36 +1,32 @@
-# Build guide
+# Build notes
 
-Use `build_mode=validate` first. It checks:
+## Pinned baseline
 
-- repository consistency;
-- RE-CS-02 support in upstream source;
-- unresolved conflict markers;
-- feeds and DAED package availability;
-- `make defconfig`;
-- device, BTF, eBPF and DAED selections;
-- host LLVM eBPF output.
+- Repository: `https://github.com/LiBwrt/openwrt-6.x.git`
+- Branch lineage: `main-nss`
+- Exact commit: `cf9444c1b20458687898489b36e1aebf56d9baf2`
+- Target: `qualcommax/ipq60xx`
+- Device: `jdcloud_re-cs-02`
+- Kernel line: `6.12`
+- Physical HLOS size: `6,291,456` bytes
 
-Use `build_mode=build` only after validation succeeds.
+The exact commit is used instead of following the moving branch.
 
-A successful artifact must contain an RE-CS-02 sysupgrade image, manifest,
-`BUILD_INFO.txt`, `SHA256SUMS`, final `.config` and the post-flash verifier.
-Artifacts from failed runs are diagnostic only.
-## Kernel image limit
+## Package inputs
 
-The RE-CS-02 uImage must not exceed 6,291,456 bytes. Detached BTF is used to
-meet this fixed limit. Never patch the profile to `KERNEL_SIZE := 8192k`.
+The workflow records the actual commits used for:
 
-## DWARVES/pahole in detached-BTF mode
+- `kenzok8/openwrt-daede`
+- `kenzok8/vmlinux-btf`
+- `NONGFAH/luci-app-athena-led`
+- `sbwml/packages_lang_golang` branch `26.x`
 
-`CONFIG_DWARVES` is an OpenWrt host-tool selector normally retained when the
-main kernel enables debug BTF. In this project the main kernel debug/BTF options
-are intentionally disabled, so `make defconfig` may remove that symbol. The
-workflow installs and verifies the host `pahole` binary used by the detached
-`vmlinux-btf` package instead.
+These package repositories move independently, so their resolved commits are written into `BUILD_INFO.txt`.
 
-## v12 kernel trim
+## Why detached BTF
 
-The boot kernel intentionally excludes tracing/profiling facilities that DAED
-does not require: BPF events, ftrace, kprobes and perf events. Networking eBPF,
-TC BPF, cgroup BPF, XDP sockets and detached BTF remain enabled.
+DAED uses CO-RE eBPF and needs matching kernel BTF. The boot kernel has a fixed 6 MiB HLOS slot. `vmlinux-btf` builds matching BTF from the same source/config and installs it under `/usr/lib/debug/boot/`, avoiding integrated debug BTF in the persistent boot image.
 
+## Why NSS remains but acceleration is disabled
+
+The known-good LiBwrt source uses NSS device drivers. Removing that baseline would increase boot risk. The first-boot defaults retain the drivers but disable optional ECM/SFE forwarding services and LuCI flow-offload flags so DAED can see traffic.

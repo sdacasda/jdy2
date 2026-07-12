@@ -1,31 +1,22 @@
 {
-  "project": "Athena AX6600 DAED Clean Builder",
-  "schema": 2,
+  "project": "Athena AX6600 Minimal DAED",
+  "project_version": "v13",
   "device": "JDCloud RE-CS-02",
+  "board": "jdcloud,re-cs-02",
   "target": "qualcommax/ipq60xx",
-  "backend": "daed",
-  "luci_manager": "luci-app-daede",
-  "default_lan_ip": "192.168.50.1",
-  "source_repo": "https://github.com/VIKINGYFY/immortalwrt.git",
-  "daede_repo": "https://github.com/kenzok8/openwrt-daede.git",
-  "artifact_retention_days": 14,
-  "project_version": "v12",
-  "flow_offload_policy": "module allowed; software and hardware offload disabled",
-  "shellcheck_policy": "warning-and-error severity only",
-  "build_order": "standard OpenWrt world target",
-  "bpf_headers_policy": "built by normal package dependency graph",
-  "btf_mode": "detached-vmlinux-btf",
+  "source_repo": "https://github.com/LiBwrt/openwrt-6.x.git",
+  "source_branch": "main-nss",
+  "source_commit": "cf9444c1b20458687898489b36e1aebf56d9baf2",
+  "known_good_reference": "ZqinKing 26.06.30_15.51.55_jdcloud_ipq60xx_libwrt",
+  "kernel_line": "6.12",
   "kernel_slot_bytes": 6291456,
-  "kernel_size_policy": "never enlarge RE-CS-02 KERNEL_SIZE",
-  "vmlinux_btf_repo": "https://github.com/kenzok8/vmlinux-btf.git",
-  "kernel_size_audit": "whitespace-tolerant Makefile assignment parser",
-  "dwarves_policy": "CONFIG_DWARVES not selected; workflow-provided host pahole is verified",
-  "kernel_trim": [
-    "BPF_EVENTS",
-    "FTRACE",
-    "KPROBES",
-    "KPROBE_EVENTS",
-    "PERF_EVENTS"
+  "btf_mode": "detached-vmlinux-btf",
+  "primary_features": [
+    "daed",
+    "luci-app-daede",
+    "luci-app-athena-led",
+    "NSS device baseline",
+    "initramfs test image"
   ],
-  "kernel_trim_reason": "fit fixed 6144 KiB RE-CS-02 kernel slot"
+  "safety_policy": "Test initramfs from U-Boot RAM before sysupgrade"
 }

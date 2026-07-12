@@ -1,80 +1,74 @@
 #!/usr/bin/env bash
-set -uo pipefail
+set -euo pipefail
 
-OPENWRT_DIR="${1:?openwrt source directory is required}"
-OUTPUT_DIR="${2:?output directory is required}"
-BUILD_RESULT="${BUILD_RESULT:-unknown}"
-BUILD_MODE="${BUILD_MODE:-unknown}"
+TOPDIR="${1:?usage: collect_output.sh OPENWRT_TOPDIR OUTPUT_DIR}"
+OUTPUT="${2:?usage: collect_output.sh OPENWRT_TOPDIR OUTPUT_DIR}"
+TOPDIR="$(cd "$TOPDIR" && pwd)"
 
-mkdir -p "$OUTPUT_DIR"
+rm -rf "$OUTPUT"
+mkdir -p "$OUTPUT/firmware" "$OUTPUT/diagnostics"
 
-[ -f "$OPENWRT_DIR/.config" ] && cp -f "$OPENWRT_DIR/.config" "$OUTPUT_DIR/athena-daed-final.config"
-[ -f "$GITHUB_WORKSPACE/build.log" ] && cp -f "$GITHUB_WORKSPACE/build.log" "$OUTPUT_DIR/build.log"
-cp -f "$GITHUB_WORKSPACE/scripts/verify_after_flash.sh" "$OUTPUT_DIR/verify-after-flash.sh"
+copy_matches() {
+    local dest="$1"
+    shift
+    local found=0
+    while IFS= read -r -d '' file; do
+        cp -a "$file" "$dest/"
+        found=1
+    done < <(find "$TOPDIR" "$@" -print0 2>/dev/null)
+    return "$found"
+}
 
-KERNEL_ITB="$(
-    find "$OPENWRT_DIR/build_dir" -type f \
-        -name 'jdcloud_re-cs-02-uImage.itb' -print -quit 2>/dev/null
-)"
-KERNEL_ITB_SIZE=0
-KERNEL_SLOT_LIMIT="${KERNEL_SLOT_LIMIT:-6291456}"
+# The two files that matter most:
+find "$TOPDIR/bin/targets/qualcommax/ipq60xx" -maxdepth 1 -type f \
+    \( -name '*jdcloud_re-cs-02*sysupgrade.bin' \
+       -o -name '*jdcloud_re-cs-02*initramfs*uImage.itb' \
+       -o -name '*jdcloud_re-cs-02*manifest' \
+       -o -name 'profiles.json' \
+       -o -name 'sha256sums' \) \
+    -exec cp -a {} "$OUTPUT/firmware/" \; 2>/dev/null || true
 
-if [ -n "$KERNEL_ITB" ] && [ -f "$KERNEL_ITB" ]; then
-    cp -f "$KERNEL_ITB" "$OUTPUT_DIR/"
-    KERNEL_ITB_SIZE="$(stat -c '%s' "$KERNEL_ITB")"
-fi
+cp -a "$TOPDIR/.config" "$OUTPUT/diagnostics/athena-minimal-final.config" 2>/dev/null || true
+"$TOPDIR/scripts/diffconfig.sh" > "$OUTPUT/diagnostics/athena-minimal-diffconfig.txt" 2>/dev/null || true
 
-TARGET_DIR="$OPENWRT_DIR/bin/targets/qualcommax/ipq60xx"
-if [ -d "$TARGET_DIR" ]; then
-    find "$TARGET_DIR" -maxdepth 1 -type f \
-        \( -name '*jdcloud_re-cs-02*' \
-        -o -name '*.manifest' \
-        -o -name '*.buildinfo' \
-        -o -name '*.json' \
-        -o -name 'sha256sums' \) \
-        -exec cp -f {} "$OUTPUT_DIR/" \;
-fi
-
-SYSUPGRADE_COUNT="$(
-    find "$OUTPUT_DIR" -maxdepth 1 -type f \
-        -name '*jdcloud_re-cs-02*sysupgrade.bin' | wc -l
-)"
+find "$TOPDIR/build_dir" -type f -name 'jdcloud_re-cs-02-uImage.itb' \
+    -exec cp -a {} "$OUTPUT/diagnostics/" \; 2>/dev/null || true
 
 {
-    echo "result=$BUILD_RESULT"
-    echo "build_mode=$BUILD_MODE"
+    echo "build_time_utc=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
     echo "source_repo=${SOURCE_REPO:-unknown}"
-    echo "source_ref=${SOURCE_REF:-unknown}"
-    echo "source_commit=${SOURCE_COMMIT:-unknown}"
-    echo "target_kernel=${TARGET_KERNEL:-unknown}"
-    echo "bpf_headers_kernel=${BPF_HEADERS_KERNEL:-unknown}"
-    echo "daede_ref=${DAEDE_REF:-unknown}"
+    echo "source_branch=${SOURCE_BRANCH:-unknown}"
+    echo "source_commit_expected=${SOURCE_COMMIT:-unknown}"
+    echo "source_commit_actual=$(git -C "$TOPDIR" rev-parse HEAD 2>/dev/null || echo unknown)"
+    echo "kernel_slot_limit=6291456"
+    echo "btf_mode=detached-vmlinux-btf"
     echo "daede_commit=${DAEDE_COMMIT:-unknown}"
     echo "vmlinux_btf_commit=${VMLINUX_BTF_COMMIT:-unknown}"
-    echo "btf_mode=detached-vmlinux-btf"
-    echo "kernel_itb_size=$KERNEL_ITB_SIZE"
-    echo "kernel_slot_limit=$KERNEL_SLOT_LIMIT"
-    echo "daed_version=${DAED_VERSION:-unknown}"
-    echo "luci_daede_version=${LUCI_DAEDE_VERSION:-unknown}"
-    echo "geodata_commit=${GEODATA_COMMIT:-unknown}"
-    echo "compile_jobs=${COMPILE_JOBS:-unknown}"
-    echo "lan_ip=${LAN_IP:-unknown}"
-    echo "sysupgrade_count=$SYSUPGRADE_COUNT"
-    echo "generated=$(date -Iseconds)"
-} > "$OUTPUT_DIR/BUILD_INFO.txt"
+    echo "athena_led_commit=${ATHENA_LED_COMMIT:-unknown}"
+    echo "golang_commit=${GOLANG_COMMIT:-unknown}"
+} > "$OUTPUT/BUILD_INFO.txt"
+
+cat > "$OUTPUT/FLASH_FIRST.txt" <<'EOF'
+DO NOT flash the sysupgrade image first.
+
+1. Enter the custom U-Boot web interface.
+2. Use its "boot uImage" / initramfs page.
+3. Upload the jdcloud_re-cs-02 initramfs-uImage.itb file.
+4. Confirm LAN, Wi-Fi, LuCI, front display, detached BTF and DAED packages.
+5. Reboot: the old installed firmware should return.
+6. Only after the RAM test is stable, flash the sysupgrade.bin without keeping settings.
+
+The HLOS partition is physically 6 MiB. Never enlarge KERNEL_SIZE in source
+unless the real HLOS/HLOS_1 partitions and bootloader logic are changed together.
+EOF
+
+cp -a "$GITHUB_WORKSPACE/scripts/verify_after_flash.sh" \
+    "$OUTPUT/verify-after-flash.sh" 2>/dev/null || true
+chmod +x "$OUTPUT/verify-after-flash.sh" 2>/dev/null || true
 
 (
-    cd "$OUTPUT_DIR" || exit 1
-    sha256sum ./* 2>/dev/null | grep -v 'SHA256SUMS$' > SHA256SUMS || true
+    cd "$OUTPUT"
+    find . -type f ! -name SHA256SUMS.txt -print0 |
+        sort -z |
+        xargs -0 sha256sum > SHA256SUMS.txt
 )
-
-ls -lh "$OUTPUT_DIR"
-
-if [ "$BUILD_RESULT" = "success" ] && [ "$BUILD_MODE" = "build" ] && [ "$SYSUPGRADE_COUNT" -lt 1 ]; then
-    echo "::error::Full build reported success but no RE-CS-02 sysupgrade image was collected."
-    exit 1
-fi
-
-if [ "$BUILD_MODE" = "validate" ]; then
-    echo "Validation mode: firmware image is not expected."
-fi

@@ -1,30 +1,50 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-OPENWRT_DIR="${1:?openwrt source directory is required}"
-LAN_IP="${LAN_IP:-192.168.50.1}"
-HOSTNAME="${HOSTNAME:-Athena-DAED}"
+TOPDIR="${1:?usage: apply_defaults.sh OPENWRT_TOPDIR}"
+TOPDIR="$(cd "$TOPDIR" && pwd)"
 
-DEFAULTS_DIR="$OPENWRT_DIR/package/base-files/files/etc/uci-defaults"
+DEFAULTS_DIR="$TOPDIR/package/base-files/files/etc/uci-defaults"
 mkdir -p "$DEFAULTS_DIR"
 
-cat > "$DEFAULTS_DIR/99-athena-daed-defaults" <<EOF
+cat > "$DEFAULTS_DIR/99-athena-minimal-daed" <<'EOF'
 #!/bin/sh
-uci set network.lan.ipaddr='$LAN_IP'
-uci set system.@system[0].hostname='$HOSTNAME'
 
-# kmod-nft-offload is a target-default package in this source tree.
-# Keep both software and hardware flow offload disabled so traffic is not
-# fast-pathed around DAED's eBPF hooks.
-if uci -q get firewall.@defaults[0] >/dev/null 2>&1; then
-    uci set firewall.@defaults[0].flow_offloading='0'
-    uci set firewall.@defaults[0].flow_offloading_hw='0'
-fi
+uci -q batch <<'UCI'
+set system.@system[0].hostname='Athena-DAED'
+set network.lan.ipaddr='192.168.1.1'
+set firewall.@defaults[0].flow_offloading='0'
+set firewall.@defaults[0].flow_offloading_hw='0'
+set athena_led.config.enable='1'
+set daed.config.enabled='0'
+set daede.config.enabled='0'
+commit system
+commit network
+commit firewall
+commit athena_led
+commit daed
+commit daede
+UCI
 
-uci commit network
-uci commit system
-uci commit firewall
+# DAED must see traffic before acceleration paths. Keep NSS device drivers,
+# but disable optional forwarding accelerators when their init scripts exist.
+for svc in qca-nss-ecm ecm shortcut-fe sfe; do
+    if [ -x "/etc/init.d/$svc" ]; then
+        "/etc/init.d/$svc" disable >/dev/null 2>&1 || true
+        "/etc/init.d/$svc" stop >/dev/null 2>&1 || true
+    fi
+done
+
 exit 0
 EOF
+chmod +x "$DEFAULTS_DIR/99-athena-minimal-daed"
 
-chmod +x "$DEFAULTS_DIR/99-athena-daed-defaults"
+cat > "$TOPDIR/package/base-files/files/etc/banner" <<'EOF'
+  ___  _   _                      ____    _    _____ ____  
+ / _ \| |_| |__   ___ _ __   __ _|  _ \  / \  | ____|  _ \ 
+| | | | __| '_ \ / _ \ '_ \ / _` | | | |/ _ \ |  _| | | | |
+| |_| | |_| | | |  __/ | | | (_| | |_| / ___ \| |___| |_| |
+ \___/ \__|_| |_|\___|_| |_|\__,_|____/_/   \_\_____|____/ 
+
+ Athena AX6600 minimal LiBwrt build: DAED + front display
+EOF

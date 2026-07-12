@@ -1,49 +1,66 @@
 #!/bin/sh
+set -u
 
-echo "===== Device ====="
-ubus call system board 2>/dev/null || true
-uname -a
-echo
+fail=0
 
-echo "===== BTF source ====="
-BTF_OK=0
+ok() {
+    printf '[OK] %s\n' "$1"
+}
+
+bad() {
+    printf '[FAIL] %s\n' "$1"
+    fail=1
+}
+
+board="$(ubus call system board 2>/dev/null)"
+echo "$board" | grep -q '"board_name": "jdcloud,re-cs-02"' \
+    && ok "board is jdcloud,re-cs-02" \
+    || bad "unexpected board"
+
+case "$(uname -r)" in
+    6.12.*) ok "kernel is on the pinned 6.12 line: $(uname -r)" ;;
+    *) bad "unexpected kernel: $(uname -r)" ;;
+esac
+
+for pkg in daed luci-app-daede vmlinux-btf luci-app-athena-led kmod-sched-bpf kmod-veth; do
+    opkg status "$pkg" 2>/dev/null | grep -q 'Status: install ok installed' \
+        && ok "package installed: $pkg" \
+        || bad "package missing: $pkg"
+done
 
 if [ -r /sys/kernel/btf/vmlinux ]; then
-    ls -lh /sys/kernel/btf/vmlinux
-    echo "BTF_MODE=integrated"
-    BTF_OK=1
+    ok "integrated kernel BTF is available"
 elif [ -r /usr/lib/debug/boot/vmlinux ]; then
-    ls -lh /usr/lib/debug/boot/vmlinux
-    ls -lh "/usr/lib/debug/boot/vmlinux-$(uname -r)" 2>/dev/null || true
-    echo "BTF_MODE=detached-vmlinux-btf"
-    BTF_OK=1
+    ok "detached BTF is available"
 else
-    echo "BTF_MISSING"
-fi
-echo
-
-echo "===== Required packages ====="
-opkg list-installed 2>/dev/null |
-    grep -E '^(daed|luci-app-daede|vmlinux-btf|kmod-sched-core|kmod-sched-bpf|kmod-veth|kmod-xdp-sockets-diag|v2ray-geo)' ||
-    true
-echo
-
-echo "===== DAED ====="
-if command -v daed >/dev/null 2>&1; then
-    daed --version 2>/dev/null || daed version 2>/dev/null || echo "DAED_BINARY_OK"
-else
-    echo "DAED_BINARY_MISSING"
+    bad "no integrated or detached BTF found"
 fi
 
-/etc/init.d/daed status 2>/dev/null || true
-echo
+for module in cls_bpf act_bpf veth; do
+    modprobe "$module" >/dev/null 2>&1 \
+        && ok "kernel module loads: $module" \
+        || bad "kernel module failed: $module"
+done
 
-echo "===== Dashboard/API listeners ====="
-ss -lntup 2>/dev/null | grep -E 'daed|dae-wing|:2023|:2024' || true
-echo
+[ -x /usr/sbin/athena-led ] \
+    && ok "Athena display binary is executable" \
+    || bad "Athena display binary is missing"
 
-if [ "$BTF_OK" -eq 1 ] && command -v daed >/dev/null 2>&1; then
-    echo "RESULT=READY_FOR_DAED_CONFIGURATION"
-else
-    echo "RESULT=DO_NOT_START_DAED"
+[ -x /etc/init.d/athena_led ] \
+    && ok "Athena display service exists" \
+    || bad "Athena display service is missing"
+
+if [ -e /dev/mmcblk0p16 ]; then
+    hlos_bytes="$(blockdev --getsize64 /dev/mmcblk0p16 2>/dev/null || echo unknown)"
+    [ "$hlos_bytes" = "6291456" ] \
+        && ok "HLOS remains 6 MiB" \
+        || bad "unexpected HLOS size: $hlos_bytes"
 fi
+
+if [ -r /dev/mmcblk0p2 ]; then
+    boot_slot="$(hexdump -e '1/1 "%u\n"' -n 1 -s 148 /dev/mmcblk0p2 2>/dev/null || echo unknown)"
+    printf '[INFO] BOOTCONFIG slot byte: %s\n' "$boot_slot"
+fi
+
+printf '\nDAED is intentionally disabled by default. Configure it in LuCI first.\n'
+exit "$fail"

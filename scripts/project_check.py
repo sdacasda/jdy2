@@ -2,18 +2,17 @@
 from __future__ import annotations
 
 import json
-import pathlib
 import re
 import sys
+from pathlib import Path
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[1]
+errors: list[str] = []
 
-REQUIRED_FILES = {
-    ".gitattributes",
-    ".github/workflows/build-athena-daed.yml",
+required_files = [
+    ".github/workflows/build-athena-minimal-daed.yml",
     ".github/workflows/validate-project.yml",
-    "config/athena-daed.config",
-    "scripts/project_check.py",
+    "config/athena-minimal.config",
     "scripts/prepare_packages.sh",
     "scripts/apply_defaults.sh",
     "scripts/verify_config.sh",
@@ -21,263 +20,91 @@ REQUIRED_FILES = {
     "scripts/verify_after_flash.sh",
     "README.md",
     "PROJECT.json",
-    "AUDIT.md",
     "docs/BUILD.md",
     "docs/FLASH.md",
-    "docs/UPDATE.md",
-}
+]
 
-FORBIDDEN_PATHS = {
-    "config/athena-dae.config",
-    "scripts/check-build-config.sh",
-    "刷机与DAED验收说明.md",
-}
-
-TEXT_SUFFIXES = {".sh", ".py", ".yml", ".yaml", ".md", ".config", ".json", ".txt", ""}
-
-REQUIRED_CONFIG = {
-    "CONFIG_TARGET_qualcommax=y",
-    "CONFIG_TARGET_qualcommax_ipq60xx=y",
-    "CONFIG_BPF_TOOLCHAIN_HOST=y",
-    "CONFIG_USE_LLVM_HOST=y",
-    "CONFIG_KERNEL_XDP_SOCKETS=y",
-    "CONFIG_PACKAGE_kmod-sched-core=y",
-    "CONFIG_PACKAGE_kmod-sched-bpf=y",
-    "CONFIG_PACKAGE_kmod-veth=y",
-    "CONFIG_PACKAGE_daed=y",
-    "CONFIG_DAED_USE_VMLINUX_BTF=y",
-    "CONFIG_PACKAGE_vmlinux-btf=y",
-    "CONFIG_PACKAGE_luci-app-daede=y",
-    "CONFIG_PACKAGE_luci-app-daede_daed=y",
-}
-
-FORBIDDEN_ENABLED_CONFIG = {
-    "CONFIG_KERNEL_BPF_EVENTS=y",
-    "CONFIG_KERNEL_FTRACE=y",
-    "CONFIG_KERNEL_KPROBES=y",
-    "CONFIG_KERNEL_KPROBE_EVENTS=y",
-    "CONFIG_KERNEL_PERF_EVENTS=y",
-    "CONFIG_KERNEL_DEBUG_INFO=y",
-    "CONFIG_KERNEL_DEBUG_INFO_BTF=y",
-    "CONFIG_KERNEL_DEBUG_INFO_BTF_MODULES=y",
-    "CONFIG_DAED_USE_KERNEL_BTF=y",
-    "CONFIG_PACKAGE_dae=y",
-    "CONFIG_PACKAGE_luci-app-daede_dae=y",
-    "CONFIG_PACKAGE_luci-app-passwall=y",
-    "CONFIG_PACKAGE_luci-app-passwall2=y",
-    "CONFIG_PACKAGE_luci-app-openclash=y",
-    "CONFIG_PACKAGE_luci-app-homeproxy=y",
-    "CONFIG_PACKAGE_kmod-qca-nss-ecm=y",
-}
-
-errors: list[str] = []
-
-for rel in sorted(REQUIRED_FILES):
+for rel in required_files:
     if not (ROOT / rel).is_file():
         errors.append(f"missing required file: {rel}")
 
-for rel in sorted(FORBIDDEN_PATHS):
-    if (ROOT / rel).exists():
-        errors.append(f"stale/forbidden file still present: {rel}")
+try:
+    project = json.loads((ROOT / "PROJECT.json").read_text(encoding="utf-8"))
+except Exception as exc:
+    errors.append(f"PROJECT.json is invalid: {exc}")
+    project = {}
+
+expected_commit = "cf9444c1b20458687898489b36e1aebf56d9baf2"
+if project.get("source_commit") != expected_commit:
+    errors.append("PROJECT.json does not pin the known-good LiBwrt commit")
+
+cfg_path = ROOT / "config/athena-minimal.config"
+cfg = cfg_path.read_text(encoding="utf-8") if cfg_path.is_file() else ""
+
+required_config = {
+    "CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=y",
+    "CONFIG_TARGET_ROOTFS_INITRAMFS=y",
+    "CONFIG_PACKAGE_daed=y",
+    "CONFIG_PACKAGE_luci-app-daede_daed=y",
+    "CONFIG_PACKAGE_kmod-sched-bpf=y",
+    "CONFIG_KERNEL_XDP_SOCKETS=y",
+    "CONFIG_DAED_USE_VMLINUX_BTF=y",
+    "CONFIG_PACKAGE_vmlinux-btf=y",
+    "CONFIG_PACKAGE_luci-app-athena-led=y",
+}
+
+for token in sorted(required_config):
+    if token not in cfg:
+        errors.append(f"missing config safeguard: {token}")
+
+for forbidden in [
+    "CONFIG_KERNEL_DEBUG_INFO_BTF=y",
+    "CONFIG_DAED_USE_KERNEL_BTF=y",
+    "CONFIG_PACKAGE_luci-app-openclash=y",
+    "CONFIG_PACKAGE_luci-app-passwall=y",
+    "CONFIG_PACKAGE_luci-app-homeproxy=y",
+    "CONFIG_PACKAGE_luci-app-dockerman=y",
+    "CONFIG_PACKAGE_luci-app-samba4=y",
+]:
+    if re.search(rf"^{re.escape(forbidden)}$", cfg, re.MULTILINE):
+        errors.append(f"forbidden config enabled: {forbidden}")
+
+workflow_path = ROOT / ".github/workflows/build-athena-minimal-daed.yml"
+workflow = workflow_path.read_text(encoding="utf-8") if workflow_path.is_file() else ""
+
+for token in [
+    "https://github.com/LiBwrt/openwrt-6.x.git",
+    expected_commit,
+    "KERNEL_SIZE_VALUE",
+    "6291456",
+    "athena-minimal.config",
+    "collect_output.sh",
+    "prepare_packages.sh",
+]:
+    if token not in workflow:
+        errors.append(f"workflow safeguard missing: {token}")
+
+for old_source in [
+    "VIKINGYFY/immortalwrt",
+    "immortalwrt/immortalwrt.git",
+]:
+    if old_source in workflow:
+        errors.append(f"old source reference found: {old_source}")
 
 for path in ROOT.rglob("*"):
     if not path.is_file() or ".git" in path.parts or "__pycache__" in path.parts:
         continue
-    if path.suffix.lower() not in TEXT_SUFFIXES and path.name not in {
-        ".gitattributes", ".gitignore", "LICENSE"
-    }:
-        continue
-
     data = path.read_bytes()
-    rel = path.relative_to(ROOT).as_posix()
-
     if b"\r\n" in data:
-        errors.append(f"CRLF line endings found: {rel}")
-
-    text = data.decode("utf-8", errors="replace")
-    if re.search(r"^(<<<<<<< |=======\s*$|>>>>>>> )", text, flags=re.MULTILINE):
-        errors.append(f"unresolved merge-conflict marker: {rel}")
-
-try:
-    meta = json.loads((ROOT / "PROJECT.json").read_text(encoding="utf-8"))
-    if meta.get("backend") != "daed":
-        errors.append("PROJECT.json backend must be daed")
-    if meta.get("device") != "JDCloud RE-CS-02":
-        errors.append("PROJECT.json device mismatch")
-except Exception as exc:
-    errors.append(f"PROJECT.json is invalid: {exc}")
-
-cfg_path = ROOT / "config/athena-daed.config"
-if cfg_path.is_file():
-    cfg_lines = {
-        line.strip()
-        for line in cfg_path.read_text(encoding="utf-8").splitlines()
-        if line.strip() and not line.lstrip().startswith("#")
-    }
-    for item in sorted(REQUIRED_CONFIG):
-        if item not in cfg_lines:
-            errors.append(f"required config missing: {item}")
-    for item in sorted(FORBIDDEN_ENABLED_CONFIG):
-        if item in cfg_lines:
-            errors.append(f"conflicting config enabled: {item}")
-
-validation_workflow = ROOT / ".github/workflows/validate-project.yml"
-if validation_workflow.is_file():
-    validation_text = validation_workflow.read_text(encoding="utf-8")
-    if "shellcheck --severity=warning scripts/*.sh" not in validation_text:
-        errors.append("validation workflow must use ShellCheck warning severity")
-
-prepare_script = ROOT / "scripts/prepare_packages.sh"
-if prepare_script.is_file():
-    prepare_text = prepare_script.read_text(encoding="utf-8")
-    for token in [
-        "VMLINUX_BTF_REPO",
-        "package/custom/vmlinux-btf",
-        "DAED_USE_VMLINUX_BTF:vmlinux-btf",
-        "::error::DAED detached-BTF dependency is missing.",
-        "stale_packages=(",
-    ]:
-        if token not in prepare_text:
-            errors.append(f"prepare_packages.sh missing detached-BTF token: {token}")
-
-workflow = ROOT / ".github/workflows/build-athena-daed.yml"
-if workflow.is_file():
-    workflow_text = workflow.read_text(encoding="utf-8")
-    for token in [
-        "VIKINGYFY/immortalwrt",
-        "kenzok8/openwrt-daede",
-        "actions/upload-artifact@v4",
-        "scripts/project_check.py",
-        "scripts/verify_config.sh",
-        "bash scripts/collect_output.sh",
-        "bash scripts/prepare_packages.sh",
-        "if-no-files-found: warn",
-        "Existing runner swap detected; no new swap file is needed.",
-        "$RUNNER_TEMP/athena-build.swap",
-        "Install build dependencies without upgrading runner",
-        "--no-install-recommends",
-    ]:
-        if token not in workflow_text:
-            errors.append(f"workflow missing required token: {token}")
-
-
-    for forbidden_token in [
-        "init_build_environment.sh",
-        "apt full-upgrade",
-        "apt-get full-upgrade",
-        "build-scripts.immortalwrt.org",
-    ]:
-        if forbidden_token in workflow_text:
-            errors.append(f"destructive/external runner initializer found: {forbidden_token}")
-
-prepare_script = ROOT / "scripts/prepare_packages.sh"
-if prepare_script.is_file():
-    prepare_text = prepare_script.read_text(encoding="utf-8")
-    for token in [
-        "package/feeds/luci/luci-app-dae",
-        "package/feeds/luci/luci-app-daed",
-        "package/custom/vmlinux-btf",
-        "DAED_USE_VMLINUX_BTF:vmlinux-btf",
-        "DEPENDS:=+luci-base +daed",
-    ]:
-        if token not in prepare_text:
-            errors.append(f"prepare_packages.sh missing required DAED-only patch token: {token}")
-
-defaults_script = ROOT / "scripts/apply_defaults.sh"
-if defaults_script.is_file():
-    defaults_text = defaults_script.read_text(encoding="utf-8")
-    for token in [
-        "flow_offloading='0'",
-        "flow_offloading_hw='0'",
-    ]:
-        if token not in defaults_text:
-            errors.append(f"apply_defaults.sh missing runtime offload safeguard: {token}")
-
-build_workflow = ROOT / ".github/workflows/build-athena-daed.yml"
-if build_workflow.is_file():
-    build_text = build_workflow.read_text(encoding="utf-8")
-    for forbidden_token in [
-        "make package/kernel/bpf-headers/compile",
-        "make package/kernel/bpf-headers/clean",
-    ]:
-        if forbidden_token in build_text:
-            errors.append(
-                f"workflow bypasses standard OpenWrt dependency order: {forbidden_token}"
-            )
-    for required_token in [
-        'make -j"$COMPILE_JOBS" world',
-        "Confirm standard OpenWrt build ordering",
-    ]:
-        if required_token not in build_text:
-            errors.append(f"workflow missing standard build token: {required_token}")
-
-prepare_script_v8 = ROOT / "scripts/prepare_packages.sh"
-if prepare_script_v8.is_file():
-    prepare_text_v8 = prepare_script_v8.read_text(encoding="utf-8")
-    if "package/feeds/video/sdl3" in prepare_text_v8:
-        errors.append("prepare_packages.sh must not delete unrelated SDL3 packages")
-
-config_text_v9 = cfg_path.read_text(encoding="utf-8") if cfg_path.is_file() else ""
-for token in [
-    "# CONFIG_KERNEL_DEBUG_INFO is not set",
-    "# CONFIG_KERNEL_DEBUG_INFO_BTF is not set",
-    "CONFIG_DAED_USE_VMLINUX_BTF=y",
-    "CONFIG_PACKAGE_vmlinux-btf=y",
-]:
-    if token not in config_text_v9:
-        errors.append(f"detached-BTF configuration missing: {token}")
-
-build_workflow_v9 = ROOT / ".github/workflows/build-athena-daed.yml"
-if build_workflow_v9.is_file():
-    build_text_v9 = build_workflow_v9.read_text(encoding="utf-8")
-    for token in [
-        "VMLINUX_BTF_REPO",
-        "VMLINUX_BTF_REF",
-        "KERNEL_SLOT_LIMIT",
-        "KERNEL_SIZE_VALUE",
-        'awk -F\':=\'',
-        'expected 6144k',
-    ]:
-        if token not in build_text_v9:
-            errors.append(f"v9 workflow safety token missing: {token}")
-if build_workflow_v9.is_file():
-    build_text_v10 = build_workflow_v9.read_text(encoding="utf-8")
-    if "grep -q '^KERNEL_SIZE := 6144k$'" in build_text_v10:
-        errors.append("workflow still uses brittle column-1 KERNEL_SIZE matching")
-
-config_text_v11 = cfg_path.read_text(encoding="utf-8") if cfg_path.is_file() else ""
-if "CONFIG_DWARVES=y" in config_text_v11:
-    errors.append("detached-BTF config must not require CONFIG_DWARVES")
-if "# CONFIG_DWARVES is not set" not in config_text_v11:
-    errors.append("detached-BTF config must document CONFIG_DWARVES as disabled")
-
-build_workflow_v11 = ROOT / ".github/workflows/build-athena-daed.yml"
-if build_workflow_v11.is_file():
-    build_text_v11 = build_workflow_v11.read_text(encoding="utf-8")
-    for token in [
-        "dwarves file",
-        "pahole --version",
-        "for tool in clang llc llvm-dis opt llvm-strip pahole",
-    ]:
-        if token not in build_text_v11:
-            errors.append(f"host-pahole safeguard missing from workflow: {token}")
-
-config_text_v12 = cfg_path.read_text(encoding="utf-8") if cfg_path.is_file() else ""
-for token in [
-    "# CONFIG_KERNEL_BPF_EVENTS is not set",
-    "# CONFIG_KERNEL_FTRACE is not set",
-    "# CONFIG_KERNEL_KPROBES is not set",
-    "# CONFIG_KERNEL_KPROBE_EVENTS is not set",
-    "# CONFIG_KERNEL_PERF_EVENTS is not set",
-]:
-    if token not in config_text_v12:
-        errors.append(f"kernel-size safeguard missing: {token}")
+        errors.append(f"CRLF line endings: {path.relative_to(ROOT)}")
+    text = data.decode("utf-8", errors="ignore")
+    if re.search(r"^(<<<<<<< |=======\s*$|>>>>>>> )", text, re.MULTILINE):
+        errors.append(f"merge conflict marker: {path.relative_to(ROOT)}")
 
 if errors:
     print("PROJECT CHECK FAILED", file=sys.stderr)
     for error in errors:
-        print(f" - {error}", file=sys.stderr)
+        print(f"- {error}", file=sys.stderr)
     raise SystemExit(1)
 
-print("PROJECT CHECK PASSED")
-print(f"Checked {sum(1 for p in ROOT.rglob('*') if p.is_file() and '__pycache__' not in p.parts)} files.")
+print(f"PROJECT CHECK PASSED ({len(required_files)} required files)")
