@@ -1,53 +1,53 @@
-# Athena AX6600 Minimal DAED — LiBwrt v14
+# Athena AX6600 RAM Diagnostic v15
 
-这是给京东云雅典娜 AX6600（JDCloud RE-CS-02）准备的极简固件编译项目。
+这不是正式固件，而是一份只在内存中启动的极小诊断镜像。
 
-## 核心原则
+它固定使用当前 ZqinKing 稳定固件对应的 LiBwrt 源码提交，只保留：
 
-- 使用已经在用户设备上验证可启动的 LiBwrt 6.12 基线。
-- 源码固定到 `cf9444c1b20458687898489b36e1aebf56d9baf2`。
-- 只重点内置 DAED、LuCI 管理和雅典娜点阵屏。
-- 保留设备所需 NSS、无线、网络基础能力。
-- 不集成 OpenClash、PassWall、HomeProxy、Docker、Samba 等大型插件。
-- BTF 使用 rootfs 中的 `vmlinux-btf`，不把调试 BTF 塞入 6 MiB HLOS。
-- 同时生成 initramfs RAM 测试镜像与 sysupgrade 固件。
+- RE-CS-02 设备和无线基础；
+- NSS 稳定基线；
+- 有线网口；
+- Ping、SSH；
+- 一个简单网页。
 
-## 第一次运行
+它明确不包含：
 
-上传整个项目到新的 GitHub 仓库。
+- DAED；
+- BTF；
+- 雅典娜屏幕插件；
+- sysupgrade；
+- factory；
+- IMG；
+- 任何持久写盘镜像。
 
-先运行：
+## 目的
 
-`Actions → Validate Athena Minimal Project → Run workflow`
+先确认“相同稳定内核基线 + 极小 initramfs”能否通过新版 U-Boot 正常启动并提供网络。
 
-然后运行主工作流，第一次选择：
+如果这个极小镜像能访问 `192.168.1.1`，说明此前 v14 更可能是附加功能、镜像体积或配置组合造成的问题，可以再逐项加入 DAED。
 
-- `build_mode`: `validate`
-- `compile_jobs`: `2`
+如果这个极小镜像仍完全没有网络，在不接串口的前提下就应停止自编译固件路线，不再尝试刷写 sysupgrade。
 
-验证成功后再新建一次运行：
+## 使用
 
-- `build_mode`: `build`
-- `compile_jobs`: `2`
+GitHub Actions 运行 `Build Athena RAM Diagnostic`，参数 `compile_jobs=2`。
 
-## 强制安全顺序
+下载 Artifact 后，只能在 U-Boot `/uimage.html` 中选择：
 
-上一次其他源码线固件曾出现循环重启，所以本项目禁止直接把第一次产物刷入 eMMC。
+`*jdcloud_re-cs-02*initramfs*uImage.itb`
 
-1. 下载 Artifact 并解压。
-2. 进入已安装的自定义 U-Boot Web。
-3. 在“启动 uImage / initramfs”页面上传 `*initramfs-uImage.itb`。
-4. 该镜像只在内存中启动，不应先覆盖当前稳定固件。
-5. 检查 LAN、Wi‑Fi、LuCI、显示屏和 BTF。
-6. 重启后应回到原有稳定 LibWrt。
-7. RAM 测试完全稳定后，才使用 `*sysupgrade.bin`，并且不保留设置。
+电脑设置：
 
-详细步骤见 `docs/FLASH.md`。
+- IP：192.168.1.2
+- 掩码：255.255.255.0
+- 网关：192.168.1.1
 
+等待最多 4 分钟，依次测试每个网口：
 
-## v14 detached-BTF compatibility fix
+```text
+ping 192.168.1.1
+http://192.168.1.1
+ssh root@192.168.1.1
+```
 
-LiBwrt removes the optional `CONFIG_DAED_USE_VMLINUX_BTF` package-choice
-symbol during `make defconfig`. The project now patches the copied DAED package
-definition so `vmlinux-btf` is a direct dependency. The final firmware still
-uses detached BTF; only the unreliable package-choice symbol is removed.
+断电后不按任何按键正常上电，会回到 eMMC 中的 ZqinKing 固件。

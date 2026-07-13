@@ -1,24 +1,12 @@
 {
-  "project": "Athena AX6600 Minimal DAED",
-  "project_version": "v14",
+  "project": "Athena AX6600 RAM Diagnostic",
+  "version": "v15",
   "device": "JDCloud RE-CS-02",
-  "board": "jdcloud,re-cs-02",
   "target": "qualcommax/ipq60xx",
   "source_repo": "https://github.com/LiBwrt/openwrt-6.x.git",
-  "source_branch": "main-nss",
   "source_commit": "cf9444c1b20458687898489b36e1aebf56d9baf2",
-  "known_good_reference": "ZqinKing 26.06.30_15.51.55_jdcloud_ipq60xx_libwrt",
-  "kernel_line": "6.12",
-  "kernel_slot_bytes": 6291456,
-  "btf_mode": "detached-vmlinux-btf",
-  "primary_features": [
-    "daed",
-    "luci-app-daede",
-    "luci-app-athena-led",
-    "NSS device baseline",
-    "initramfs test image"
-  ],
-  "safety_policy": "Test initramfs from U-Boot RAM before sysupgrade",
-  "btf_selection": "DAED Makefile patched to unconditional vmlinux-btf dependency",
-  "resolved_issue": "LiBwrt defconfig removes CONFIG_DAED_USE_VMLINUX_BTF"
+  "purpose": "RAM-only boot diagnostic without DAED, BTF or display packages",
+  "persistent_images_uploaded": false,
+  "expected_lan_ip": "192.168.1.1",
+  "safety": "Artifact contains only initramfs FIT image and diagnostics"
 }

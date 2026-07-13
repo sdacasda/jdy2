@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CONFIG_FILE="${1:-.config}"
-DAED_MAKEFILE="${2:-package/custom/daed/Makefile}"
-[[ -f "$CONFIG_FILE" ]] || {
-    echo "::error::Config file not found: $CONFIG_FILE"
+CONFIG="${1:-.config}"
+[[ -f "$CONFIG" ]] || {
+    echo "::error::missing config: $CONFIG"
     exit 1
 }
 
@@ -12,64 +11,29 @@ required=(
     "CONFIG_TARGET_qualcommax=y"
     "CONFIG_TARGET_qualcommax_ipq60xx=y"
     "CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=y"
-    "CONFIG_TARGET_ROOTFS_SQUASHFS=y"
     "CONFIG_TARGET_ROOTFS_INITRAMFS=y"
     "CONFIG_NSS_FIRMWARE_VERSION_11_4=y"
-    "CONFIG_PACKAGE_daed=y"
-    "CONFIG_PACKAGE_luci-app-daede=y"
-    "CONFIG_PACKAGE_luci-app-daede_daed=y"
-    "CONFIG_PACKAGE_kmod-sched-core=y"
-    "CONFIG_PACKAGE_kmod-sched-bpf=y"
-    "CONFIG_PACKAGE_kmod-veth=y"
-    "CONFIG_KERNEL_XDP_SOCKETS=y"
-    "CONFIG_PACKAGE_vmlinux-btf=y"
-    "CONFIG_PACKAGE_luci-app-athena-led=y"
+    "CONFIG_PACKAGE_dropbear=y"
+    "CONFIG_PACKAGE_uhttpd=y"
 )
 
-for setting in "${required[@]}"; do
-    if ! grep -Fxq "$setting" "$CONFIG_FILE"; then
-        echo "::error::Required setting was removed by make defconfig: $setting"
+for item in "${required[@]}"; do
+    grep -Fxq "$item" "$CONFIG" || {
+        echo "::error::make defconfig removed required setting: $item"
         exit 1
-    fi
+    }
 done
 
 for forbidden in \
-    "CONFIG_DAED_USE_VMLINUX_BTF=y" \
-    "CONFIG_KERNEL_DEBUG_INFO_BTF=y" \
-    "CONFIG_DAED_USE_KERNEL_BTF=y" \
-    "CONFIG_PACKAGE_luci-app-openclash=y" \
-    "CONFIG_PACKAGE_luci-app-passwall=y" \
-    "CONFIG_PACKAGE_luci-app-homeproxy=y" \
-    "CONFIG_PACKAGE_luci-app-dockerman=y" \
-    "CONFIG_PACKAGE_luci-app-samba4=y" \
-    "CONFIG_PACKAGE_luci-app-adguardhome=y"; do
-    if grep -Fxq "$forbidden" "$CONFIG_FILE"; then
-        echo "::error::Forbidden setting is enabled: $forbidden"
+    "CONFIG_PACKAGE_daed=y" \
+    "CONFIG_PACKAGE_luci-app-daede=y" \
+    "CONFIG_PACKAGE_vmlinux-btf=y" \
+    "CONFIG_PACKAGE_luci-app-athena-led=y" \
+    "CONFIG_KERNEL_DEBUG_INFO_BTF=y"; do
+    if grep -Fxq "$forbidden" "$CONFIG"; then
+        echo "::error::diagnostic image unexpectedly enables: $forbidden"
         exit 1
     fi
 done
 
-[[ -f "$DAED_MAKEFILE" ]] || {
-    echo "::error::Patched DAED Makefile not found: $DAED_MAKEFILE"
-    exit 1
-}
-
-if ! grep -Fq '+vmlinux-btf' "$DAED_MAKEFILE"; then
-    echo "::error::DAED does not have an unconditional vmlinux-btf dependency."
-    exit 1
-fi
-
-if grep -q 'DAED_USE_' "$DAED_MAKEFILE"; then
-    echo "::error::DAED still contains unsupported DAED_USE_* choice symbols."
-    exit 1
-fi
-
-if grep -q '^define Package/daed/config$' "$DAED_MAKEFILE"; then
-    echo "::error::DAED package choice block was not removed."
-    exit 1
-fi
-
-echo "Effective configuration and detached-BTF package wiring are valid."
-grep -E \
-    'TARGET_qualcommax|jdcloud_re-cs-02|ROOTFS_INITRAMFS|PACKAGE_(daed|luci-app-daede|vmlinux-btf|luci-app-athena-led|kmod-sched-bpf)|KERNEL_XDP_SOCKETS' \
-    "$CONFIG_FILE" || true
+echo "RAM diagnostic configuration is valid."

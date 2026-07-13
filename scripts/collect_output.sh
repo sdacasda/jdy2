@@ -3,72 +3,58 @@ set -euo pipefail
 
 TOPDIR="${1:?usage: collect_output.sh OPENWRT_TOPDIR OUTPUT_DIR}"
 OUTPUT="${2:?usage: collect_output.sh OPENWRT_TOPDIR OUTPUT_DIR}"
-TOPDIR="$(cd "$TOPDIR" && pwd)"
 
 rm -rf "$OUTPUT"
-mkdir -p "$OUTPUT/firmware" "$OUTPUT/diagnostics"
+mkdir -p "$OUTPUT"
 
-copy_matches() {
-    local dest="$1"
-    shift
-    local found=0
-    while IFS= read -r -d '' file; do
-        cp -a "$file" "$dest/"
-        found=1
-    done < <(find "$TOPDIR" "$@" -print0 2>/dev/null)
-    return "$found"
-}
+TARGET="$TOPDIR/bin/targets/qualcommax/ipq60xx"
+IMAGE="$(
+    find "$TARGET" -maxdepth 1 -type f \
+        -name '*jdcloud_re-cs-02*initramfs*uImage.itb' \
+        -print -quit 2>/dev/null || true
+)"
 
-# The two files that matter most:
-find "$TOPDIR/bin/targets/qualcommax/ipq60xx" -maxdepth 1 -type f \
-    \( -name '*jdcloud_re-cs-02*sysupgrade.bin' \
-       -o -name '*jdcloud_re-cs-02*initramfs*uImage.itb' \
-       -o -name '*jdcloud_re-cs-02*manifest' \
-       -o -name 'profiles.json' \
-       -o -name 'sha256sums' \) \
-    -exec cp -a {} "$OUTPUT/firmware/" \; 2>/dev/null || true
+if [[ -z "$IMAGE" || ! -f "$IMAGE" ]]; then
+    echo "::error::No RE-CS-02 initramfs FIT image was generated."
+    exit 1
+fi
 
-cp -a "$TOPDIR/.config" "$OUTPUT/diagnostics/athena-minimal-final.config" 2>/dev/null || true
-"$TOPDIR/scripts/diffconfig.sh" > "$OUTPUT/diagnostics/athena-minimal-diffconfig.txt" 2>/dev/null || true
+cp -a "$IMAGE" "$OUTPUT/"
+cp -a "$TOPDIR/.config" "$OUTPUT/athena-ram-diagnostic-final.config"
 
-find "$TOPDIR/build_dir" -type f -name 'jdcloud_re-cs-02-uImage.itb' \
-    -exec cp -a {} "$OUTPUT/diagnostics/" \; 2>/dev/null || true
+cat > "$OUTPUT/README-FIRST.txt" <<'EOF'
+THIS ARTIFACT CONTAINS A RAM-ONLY DIAGNOSTIC IMAGE.
 
-{
-    echo "build_time_utc=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-    echo "source_repo=${SOURCE_REPO:-unknown}"
-    echo "source_branch=${SOURCE_BRANCH:-unknown}"
-    echo "source_commit_expected=${SOURCE_COMMIT:-unknown}"
-    echo "source_commit_actual=$(git -C "$TOPDIR" rev-parse HEAD 2>/dev/null || echo unknown)"
-    echo "kernel_slot_limit=6291456"
-    echo "btf_mode=detached-vmlinux-btf"
-    echo "daede_commit=${DAEDE_COMMIT:-unknown}"
-    echo "vmlinux_btf_commit=${VMLINUX_BTF_COMMIT:-unknown}"
-    echo "athena_led_commit=${ATHENA_LED_COMMIT:-unknown}"
-    echo "golang_commit=${GOLANG_COMMIT:-unknown}"
-} > "$OUTPUT/BUILD_INFO.txt"
+Use only the file whose name contains:
+  jdcloud_re-cs-02
+  initramfs
+  uImage.itb
 
-cat > "$OUTPUT/FLASH_FIRST.txt" <<'EOF'
-DO NOT flash the sysupgrade image first.
+Open the custom U-Boot Web page /uimage.html and choose "启动 uImage".
 
-1. Enter the custom U-Boot web interface.
-2. Use its "boot uImage" / initramfs page.
-3. Upload the jdcloud_re-cs-02 initramfs-uImage.itb file.
-4. Confirm LAN, Wi-Fi, LuCI, front display, detached BTF and DAED packages.
-5. Reboot: the old installed firmware should return.
-6. Only after the RAM test is stable, flash the sysupgrade.bin without keeping settings.
+The artifact intentionally contains no sysupgrade.bin, factory.bin or IMG file.
+It cannot be used for a persistent firmware upgrade.
 
-The HLOS partition is physically 6 MiB. Never enlarge KERNEL_SIZE in source
-unless the real HLOS/HLOS_1 partitions and bootloader logic are changed together.
+Expected test:
+  1. Connect the PC directly by Ethernet.
+  2. PC static address: 192.168.1.2 / 255.255.255.0.
+  3. Boot the initramfs from U-Boot.
+  4. Wait up to 4 minutes.
+  5. Ping 192.168.1.1 and open http://192.168.1.1.
+  6. Try every physical Ethernet port.
+
+If this tiny baseline still has no network, stop custom-firmware testing.
+Without a serial console there is no safe way to identify an early boot failure.
 EOF
 
-cp -a "$GITHUB_WORKSPACE/scripts/verify_after_flash.sh" \
-    "$OUTPUT/verify-after-flash.sh" 2>/dev/null || true
-chmod +x "$OUTPUT/verify-after-flash.sh" 2>/dev/null || true
+{
+    echo "source_commit=$(git -C "$TOPDIR" rev-parse HEAD)"
+    echo "image_name=$(basename "$IMAGE")"
+    echo "image_bytes=$(stat -c '%s' "$IMAGE")"
+    echo "sha256=$(sha256sum "$IMAGE" | awk '{print $1}')"
+} > "$OUTPUT/BUILD_INFO.txt"
 
 (
     cd "$OUTPUT"
-    find . -type f ! -name SHA256SUMS.txt -print0 |
-        sort -z |
-        xargs -0 sha256sum > SHA256SUMS.txt
+    sha256sum ./* > SHA256SUMS.txt
 )
