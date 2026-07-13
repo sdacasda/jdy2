@@ -15,6 +15,7 @@ required=(
     "CONFIG_NSS_FIRMWARE_VERSION_11_4=y"
     "CONFIG_PACKAGE_dropbear=y"
     "CONFIG_PACKAGE_uhttpd=y"
+    "CONFIG_PACKAGE_ath11k-firmware-qcn9074=y"
 )
 
 for item in "${required[@]}"; do
@@ -25,6 +26,9 @@ for item in "${required[@]}"; do
 done
 
 for forbidden in \
+    "CONFIG_PACKAGE_ath11k-firmware-qcn9074-ddwrt=y" \
+    "CONFIG_PACKAGE_luci=y" \
+    "CONFIG_PACKAGE_luci-base=y" \
     "CONFIG_PACKAGE_daed=y" \
     "CONFIG_PACKAGE_luci-app-daede=y" \
     "CONFIG_PACKAGE_vmlinux-btf=y" \

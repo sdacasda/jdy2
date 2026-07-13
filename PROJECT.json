@@ -1,6 +1,6 @@
 {
   "project": "Athena AX6600 RAM Diagnostic",
-  "version": "v15",
+  "version": "v16",
   "device": "JDCloud RE-CS-02",
   "target": "qualcommax/ipq60xx",
   "source_repo": "https://github.com/LiBwrt/openwrt-6.x.git",
@@ -8,5 +8,7 @@
   "purpose": "RAM-only boot diagnostic without DAED, BTF or display packages",
   "persistent_images_uploaded": false,
   "expected_lan_ip": "192.168.1.1",
-  "safety": "Artifact contains only initramfs FIT image and diagnostics"
+  "safety": "Artifact contains only initramfs FIT image and diagnostics",
+  "fix": "remove overlapping ath11k-firmware-qcn9074-ddwrt package",
+  "diagnostics": "always upload build.log and ERROR_CONTEXT.txt"
 }

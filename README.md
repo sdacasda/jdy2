@@ -1,4 +1,4 @@
-# Athena AX6600 RAM Diagnostic v15
+# Athena AX6600 RAM Diagnostic v16
 
 这不是正式固件，而是一份只在内存中启动的极小诊断镜像。
 
@@ -51,3 +51,12 @@ ssh root@192.168.1.1
 ```
 
 断电后不按任何按键正常上电，会回到 eMMC 中的 ZqinKing 固件。
+
+
+## v16 修复
+
+RE-CS-02 的设备配置本身选择普通 `ath11k-firmware-qcn9074`。v15 又手动加入
+`ath11k-firmware-qcn9074-ddwrt`，两套固件可能安装重叠文件。v16 删除 DD-WRT
+变体，只保留设备配置使用的普通 QCN9074 固件，并移除 LuCI 以缩小诊断镜像。
+
+工作流现在即使失败也会上传 `build.log` 和 `ERROR_CONTEXT.txt`。

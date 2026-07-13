@@ -34,6 +34,8 @@ for token in [
     "CONFIG_PACKAGE_uhttpd=y",
     "# CONFIG_PACKAGE_daed is not set",
     "# CONFIG_PACKAGE_vmlinux-btf is not set",
+    "CONFIG_PACKAGE_ath11k-firmware-qcn9074=y",
+    "# CONFIG_PACKAGE_ath11k-firmware-qcn9074-ddwrt is not set",
 ]:
     if token not in cfg:
         errors.append(f"config safeguard missing: {token}")
@@ -43,6 +45,8 @@ for token in [
     "cf9444c1b20458687898489b36e1aebf56d9baf2",
     "collect_output.sh",
     "No persistent firmware",
+    "ERROR_CONTEXT.txt",
+    "continue-on-error: true",
 ]:
     if token not in workflow:
         errors.append(f"workflow safeguard missing: {token}")

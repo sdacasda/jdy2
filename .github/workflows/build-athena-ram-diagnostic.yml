@@ -88,20 +88,53 @@ jobs:
           find dl -type f -size -1024c -delete || true
 
       - name: Compile RAM-only diagnostic
+        id: compile
+        continue-on-error: true
         working-directory: openwrt
         run: |
           set -o pipefail
-          make -j"${{ inputs.compile_jobs }}" world 2>&1 | tee "$GITHUB_WORKSPACE/build.log" || {
-            make -j1 V=s world 2>&1 | tee -a "$GITHUB_WORKSPACE/build.log"
-          }
+          JOBS="${{ inputs.compile_jobs }}"
 
-      - name: Collect only the initramfs FIT image
+          make -j"$JOBS" world 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+          RC="${PIPESTATUS[0]}"
+
+          if [ "$RC" -ne 0 ] && [ "$JOBS" != "1" ]; then
+            echo "Parallel build failed; retrying once with serial verbose output."
+            make -j1 V=s world 2>&1 | tee -a "$GITHUB_WORKSPACE/build.log"
+            RC="${PIPESTATUS[0]}"
+          fi
+
+          echo "build_rc=$RC" >> "$GITHUB_OUTPUT"
+          exit "$RC"
+
+      - name: Extract the first useful build errors
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p output
+          if [ -f build.log ]; then
+            {
+              echo "=== first ERROR lines ==="
+              grep -nE 'ERROR:|check_data_file_clashes|conflicts:|failed to write database|Cannot install package' \
+                build.log | head -n 80 || true
+              echo
+              echo "=== final 250 lines ==="
+              tail -n 250 build.log
+            } > output/ERROR_CONTEXT.txt
+          else
+            echo "build.log was not created" > output/ERROR_CONTEXT.txt
+          fi
+
+      - name: Collect the initramfs image and diagnostics
+        if: always()
         run: |
           set -euo pipefail
           bash scripts/collect_output.sh \
             "$GITHUB_WORKSPACE/openwrt" \
-            "$GITHUB_WORKSPACE/output"
-          cp -a build.log output/
+            "$GITHUB_WORKSPACE/output-collected"
+
+          cp -a output-collected/. output/
+          cp -a build.log output/ 2>/dev/null || true
 
           # No persistent firmware may leave this workflow.
           if find output -type f \
@@ -112,6 +145,7 @@ jobs:
           fi
 
       - name: Upload RAM diagnostic artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: Athena-AX6600-RAM-Diagnostic-${{ github.run_number }}
@@ -119,3 +153,9 @@ jobs:
           retention-days: 14
           if-no-files-found: error
           compression-level: 6
+
+      - name: Mark failed compilation
+        if: steps.compile.outcome == 'failure'
+        run: |
+          echo "::error::Compilation failed. Download ERROR_CONTEXT.txt and build.log from the artifact."
+          exit 1

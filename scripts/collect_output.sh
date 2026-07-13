@@ -14,13 +14,14 @@ IMAGE="$(
         -print -quit 2>/dev/null || true
 )"
 
-if [[ -z "$IMAGE" || ! -f "$IMAGE" ]]; then
-    echo "::error::No RE-CS-02 initramfs FIT image was generated."
-    exit 1
+if [[ -n "$IMAGE" && -f "$IMAGE" ]]; then
+    cp -a "$IMAGE" "$OUTPUT/"
+else
+    echo "No RE-CS-02 initramfs FIT image was generated." \
+        > "$OUTPUT/NO_IMAGE_GENERATED.txt"
 fi
 
-cp -a "$IMAGE" "$OUTPUT/"
-cp -a "$TOPDIR/.config" "$OUTPUT/athena-ram-diagnostic-final.config"
+cp -a "$TOPDIR/.config" "$OUTPUT/athena-ram-diagnostic-final.config" 2>/dev/null || true
 
 cat > "$OUTPUT/README-FIRST.txt" <<'EOF'
 THIS ARTIFACT CONTAINS A RAM-ONLY DIAGNOSTIC IMAGE.
@@ -48,10 +49,14 @@ Without a serial console there is no safe way to identify an early boot failure.
 EOF
 
 {
-    echo "source_commit=$(git -C "$TOPDIR" rev-parse HEAD)"
-    echo "image_name=$(basename "$IMAGE")"
-    echo "image_bytes=$(stat -c '%s' "$IMAGE")"
-    echo "sha256=$(sha256sum "$IMAGE" | awk '{print $1}')"
+    echo "source_commit=$(git -C "$TOPDIR" rev-parse HEAD 2>/dev/null || echo unknown)"
+    if [[ -n "$IMAGE" && -f "$IMAGE" ]]; then
+        echo "image_name=$(basename "$IMAGE")"
+        echo "image_bytes=$(stat -c '%s' "$IMAGE")"
+        echo "sha256=$(sha256sum "$IMAGE" | awk '{print $1}')"
+    else
+        echo "image_name=not-generated"
+    fi
 } > "$OUTPUT/BUILD_INFO.txt"
 
 (
