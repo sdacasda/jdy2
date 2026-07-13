@@ -1,65 +1,50 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 TOPDIR="${1:?usage: collect_output.sh OPENWRT_TOPDIR OUTPUT_DIR}"
 OUTPUT="${2:?usage: collect_output.sh OPENWRT_TOPDIR OUTPUT_DIR}"
-
-rm -rf "$OUTPUT"
-mkdir -p "$OUTPUT"
-
 TARGET="$TOPDIR/bin/targets/qualcommax/ipq60xx"
-IMAGE="$(
-    find "$TARGET" -maxdepth 1 -type f \
-        -name '*jdcloud_re-cs-02*initramfs*uImage.itb' \
-        -print -quit 2>/dev/null || true
-)"
+rm -rf "$OUTPUT"
+mkdir -p "$OUTPUT/firmware" "$OUTPUT/diagnostics"
 
-if [[ -n "$IMAGE" && -f "$IMAGE" ]]; then
-    cp -a "$IMAGE" "$OUTPUT/"
-else
-    echo "No RE-CS-02 initramfs FIT image was generated." \
-        > "$OUTPUT/NO_IMAGE_GENERATED.txt"
-fi
+INITRAMFS="$(find "$TARGET" -maxdepth 1 -type f -name '*jdcloud_re-cs-02*initramfs*uImage.itb' -print -quit 2>/dev/null || true)"
+SYSUPGRADE="$(find "$TARGET" -maxdepth 1 -type f -name '*jdcloud_re-cs-02*squashfs-sysupgrade.bin' -print -quit 2>/dev/null || true)"
 
-cp -a "$TOPDIR/.config" "$OUTPUT/athena-ram-diagnostic-final.config" 2>/dev/null || true
+if [[ -n "$INITRAMFS" && -f "$INITRAMFS" ]]; then cp -a "$INITRAMFS" "$OUTPUT/firmware/"; else echo "No initramfs generated" > "$OUTPUT/diagnostics/NO_INITRAMFS.txt"; fi
+if [[ -n "$SYSUPGRADE" && -f "$SYSUPGRADE" ]]; then cp -a "$SYSUPGRADE" "$OUTPUT/firmware/"; else echo "No sysupgrade generated" > "$OUTPUT/diagnostics/NO_SYSUPGRADE.txt"; fi
 
-cat > "$OUTPUT/README-FIRST.txt" <<'EOF'
-THIS ARTIFACT CONTAINS A RAM-ONLY DIAGNOSTIC IMAGE.
+for file in "$TARGET"/sha256sums "$TARGET"/profiles.json "$TARGET"/*manifest; do
+  [ -f "$file" ] && cp -a "$file" "$OUTPUT/firmware/" || true
+done
+cp -a "$TOPDIR/.config" "$OUTPUT/diagnostics/athena-final-candidate.config" 2>/dev/null || true
+"$TOPDIR/scripts/diffconfig.sh" > "$OUTPUT/diagnostics/athena-final-candidate.diffconfig" 2>/dev/null || true
+find "$TOPDIR/build_dir" -type f -name 'jdcloud_re-cs-02-uImage.itb' -exec cp -a {} "$OUTPUT/diagnostics/" \; 2>/dev/null || true
 
-Use only the file whose name contains:
-  jdcloud_re-cs-02
-  initramfs
-  uImage.itb
+cat > "$OUTPUT/TEST_FIRST.txt" <<'TXT'
+ONE BUILD, TWO IMAGES.
 
-Open the custom U-Boot Web page /uimage.html and choose "启动 uImage".
+FIRST TEST ONLY:
+  *jdcloud_re-cs-02*initramfs*uImage.itb
 
-The artifact intentionally contains no sysupgrade.bin, factory.bin or IMG file.
-It cannot be used for a persistent firmware upgrade.
+Use U-Boot /uimage.html. Do not flash sysupgrade first.
+Open http://192.168.1.1/diag.html and SSH root@192.168.1.1.
+Run: athena-feature-check
+Wake-on-LAN is available in LuCI and with etherwake.
 
-Expected test:
-  1. Connect the PC directly by Ethernet.
-  2. PC static address: 192.168.1.2 / 255.255.255.0.
-  3. Boot the initramfs from U-Boot.
-  4. Wait up to 4 minutes.
-  5. Ping 192.168.1.1 and open http://192.168.1.1.
-  6. Try every physical Ethernet port.
-
-If this tiny baseline still has no network, stop custom-firmware testing.
-Without a serial console there is no safe way to identify an early boot failure.
-EOF
+The same Artifact contains sysupgrade.bin, so no second cloud build is needed.
+Use it only after the full-feature RAM image remains stable.
+TXT
 
 {
-    echo "source_commit=$(git -C "$TOPDIR" rev-parse HEAD 2>/dev/null || echo unknown)"
-    if [[ -n "$IMAGE" && -f "$IMAGE" ]]; then
-        echo "image_name=$(basename "$IMAGE")"
-        echo "image_bytes=$(stat -c '%s' "$IMAGE")"
-        echo "sha256=$(sha256sum "$IMAGE" | awk '{print $1}')"
-    else
-        echo "image_name=not-generated"
-    fi
+  echo "build_time_utc=$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+  echo "source_commit=$(git -C "$TOPDIR" rev-parse HEAD 2>/dev/null || echo unknown)"
+  echo "kernel_slot_limit=6291456"
+  echo "daede_ref=${DAEDE_REF:-unknown}"
+  echo "daede_commit=${DAEDE_COMMIT:-unknown}"
+  echo "vmlinux_btf_commit=${VMLINUX_BTF_COMMIT:-unknown}"
+  echo "athena_led_commit=${ATHENA_LED_COMMIT:-unknown}"
+  echo "golang_commit=${GOLANG_COMMIT:-unknown}"
+  [[ -z "$INITRAMFS" ]] || echo "initramfs_bytes=$(stat -c '%s' "$INITRAMFS")"
+  [[ -z "$SYSUPGRADE" ]] || echo "sysupgrade_bytes=$(stat -c '%s' "$SYSUPGRADE")"
 } > "$OUTPUT/BUILD_INFO.txt"
 
-(
-    cd "$OUTPUT"
-    sha256sum ./* > SHA256SUMS.txt
-)
+(cd "$OUTPUT" && find . -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt)

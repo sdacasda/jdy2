@@ -1,23 +1,18 @@
 # Changelog
 
-## v13
+## v17
 
-- Rebuilt from scratch on the exact LiBwrt commit used by the known-good 6.12.94 firmware.
-- Targets only JDCloud RE-CS-02.
-- Adds DAED with the daed LuCI backend.
-- Adds matching detached BTF.
-- Adds the Athena front-display LuCI package.
-- Preserves the stable NSS/device baseline without aggressive kernel trimming.
-- Generates an initramfs RAM-test image before persistent sysupgrade.
-- Enforces the physical 6 MiB HLOS limit.
-- Removes unrelated large application selections.
+- One build produces initramfs and sysupgrade.
+- Preserves the v16-proven RAM emergency network.
+- Includes DAED, detached BTF and Athena display together.
+- Pins openwrt-daede to v2026.07.09.
+- Disables DAED and display services by default.
+- Removes the overlapping QCN9074 DD-WRT firmware selection.
+- Preserves the exact working LiBwrt source commit and 6 MiB HLOS limit.
 
-## v14
+## v18
 
-- Fixes LiBwrt `make defconfig` removing `CONFIG_DAED_USE_VMLINUX_BTF`.
-- Patches the copied DAED Makefile to depend on `vmlinux-btf` unconditionally.
-- Removes the optional `DAED_USE_KERNEL_BTF` / `DAED_USE_VMLINUX_BTF` choice
-  from the copied package definition.
-- Keeps `CONFIG_PACKAGE_vmlinux-btf=y` and integrated kernel BTF disabled.
-- Verifies the patched DAED dependency before compilation.
-
+- Adds `luci-app-wol`, `etherwake` and Simplified Chinese WOL translation.
+- Adds build-time checks that all WOL packages survive `make defconfig`.
+- Adds `etherwake` to the full-feature RAM diagnostic check.
+- Keeps the same pinned LiBwrt/DAED/BTF/display baseline and one-build workflow.

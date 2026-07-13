@@ -8,7 +8,7 @@ CUSTOM="$TOPDIR/package/custom"
 WORK="$TOPDIR/.package-sources"
 
 DAEDE_REPO="${DAEDE_REPO:-https://github.com/kenzok8/openwrt-daede.git}"
-DAEDE_REF="${DAEDE_REF:-main}"
+DAEDE_REF="${DAEDE_REF:-v2026.07.09}"
 VMLINUX_BTF_REPO="${VMLINUX_BTF_REPO:-https://github.com/kenzok8/vmlinux-btf.git}"
 VMLINUX_BTF_REF="${VMLINUX_BTF_REF:-main}"
 ATHENA_LED_REPO="${ATHENA_LED_REPO:-https://github.com/NONGFAH/luci-app-athena-led.git}"

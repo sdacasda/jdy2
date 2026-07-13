@@ -1,23 +1,9 @@
-# Static audit record
+# Static audit
 
-The local project generator validated:
+Validated locally: shell syntax, Python syntax, workflow YAML, source pin, target, detached-BTF wiring, v16 RAM network fallback, QCN9074 firmware conflict prevention, both image collection paths, 6 MiB kernel guard, line endings, merge markers and ZIP integrity.
 
-- shell syntax for every `.sh` file;
-- Python syntax and project invariants;
-- workflow YAML parsing;
-- LF line endings;
-- absence of merge-conflict markers;
-- exact source commit pin;
-- detached-BTF configuration;
-- initramfs and sysupgrade collection;
-- 6 MiB persistent-kernel guard;
-- ZIP integrity.
+Real-device full-feature initramfs testing remains mandatory before persistent flashing.
 
-This is a static project validation. A complete GitHub cloud build and an RE-CS-02 RAM boot remain required before persistent flashing.
+## v18 WOL safeguards
 
-## v14 regression guard
-
-A synthetic copy of the current upstream DAED BTF choice was patched locally.
-Validation confirms that the conditional dependency and both `DAED_USE_*`
-symbols are removed and that `+vmlinux-btf` remains.
-
+Static checks require `luci-app-wol`, `etherwake` and the Simplified Chinese WOL translation in the effective configuration and runtime diagnostic script.

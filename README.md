@@ -1,62 +1,61 @@
-# Athena AX6600 RAM Diagnostic v16
+# Athena AX6600 DAED + WOL Final Candidate v18
 
-这不是正式固件，而是一份只在内存中启动的极小诊断镜像。
+这版只需要跑一次 GitHub Actions，随后同一个 Artifact 同时提供：
 
-它固定使用当前 ZqinKing 稳定固件对应的 LiBwrt 源码提交，只保留：
+- 完整功能的 `initramfs-uImage.itb`
+- 对应的 `squashfs-sysupgrade.bin`
 
-- RE-CS-02 设备和无线基础；
-- NSS 稳定基线；
-- 有线网口；
-- Ping、SSH；
-- 一个简单网页。
+内置 DAED、luci-app-daede、匹配内核的外置 BTF、雅典娜点阵屏、中文 LuCI，以及网络唤醒 `luci-app-wol + etherwake`。
 
-它明确不包含：
+v17 保留了 v16 已经在真机验证成功的应急有线网络逻辑。完整功能 initramfs 即使标准 LAN 初始化异常，也会尝试让所有有线口响应 `192.168.1.1`。
 
-- DAED；
-- BTF；
-- 雅典娜屏幕插件；
-- sysupgrade；
-- factory；
-- IMG；
-- 任何持久写盘镜像。
+DAED 和屏幕服务默认不自动启动。先确认 RAM 系统稳定，再逐项测试。
 
-## 目的
+## 编译
 
-先确认“相同稳定内核基线 + 极小 initramfs”能否通过新版 U-Boot 正常启动并提供网络。
+上传整个项目后运行：
 
-如果这个极小镜像能访问 `192.168.1.1`，说明此前 v14 更可能是附加功能、镜像体积或配置组合造成的问题，可以再逐项加入 DAED。
+`Actions → Build Athena DAED Final Candidate → Run workflow`
 
-如果这个极小镜像仍完全没有网络，在不接串口的前提下就应停止自编译固件路线，不再尝试刷写 sysupgrade。
+参数仅选：
 
-## 使用
+`compile_jobs = 2`
 
-GitHub Actions 运行 `Build Athena RAM Diagnostic`，参数 `compile_jobs=2`。
+## 测试
 
-下载 Artifact 后，只能在 U-Boot `/uimage.html` 中选择：
+先在 U-Boot `/uimage.html` 上传 `*initramfs*uImage.itb`。
 
-`*jdcloud_re-cs-02*initramfs*uImage.itb`
+启动后打开：
 
-电脑设置：
+- `http://192.168.1.1/diag.html`
+- `http://192.168.1.1/cgi-bin/luci/`
 
-- IP：192.168.1.2
-- 掩码：255.255.255.0
-- 网关：192.168.1.1
+SSH 后运行：
 
-等待最多 4 分钟，依次测试每个网口：
-
-```text
-ping 192.168.1.1
-http://192.168.1.1
-ssh root@192.168.1.1
+```sh
+athena-feature-check
 ```
 
-断电后不按任何按键正常上电，会回到 eMMC 中的 ZqinKing 固件。
+显示屏测试：
 
+```sh
+uci set athena_led.config.enable='1'
+uci commit athena_led
+/etc/init.d/athena_led restart
+```
 
-## v16 修复
+断电正常上电可回到 ZqinKing 固件。只有完整功能 RAM 镜像持续稳定，才使用同一 Artifact 中的 `squashfs-sysupgrade.bin`，并且不保留设置。
 
-RE-CS-02 的设备配置本身选择普通 `ath11k-firmware-qcn9074`。v15 又手动加入
-`ath11k-firmware-qcn9074-ddwrt`，两套固件可能安装重叠文件。v16 删除 DD-WRT
-变体，只保留设备配置使用的普通 QCN9074 固件，并移除 LuCI 以缩小诊断镜像。
+## 网络唤醒
 
-工作流现在即使失败也会上传 `build.log` 和 `ERROR_CONTEXT.txt`。
+LuCI 中使用：
+
+`网络 → 网络唤醒`
+
+命令行测试：
+
+```sh
+etherwake -i br-lan AA:BB:CC:DD:EE:FF
+```
+
+把示例 MAC 地址替换为电脑有线网卡的 MAC。该功能负责在家中局域网发送魔术包；从外网访问路由器后台仍应通过安全 VPN，而不是把 LuCI 直接暴露到公网。

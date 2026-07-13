@@ -1,18 +1,10 @@
-name: Build Athena AX6600 Minimal DAED
+name: Build Athena DAED WOL Final Candidate
 
 on:
   workflow_dispatch:
     inputs:
-      build_mode:
-        description: "validate only, or build firmware"
-        required: true
-        default: "validate"
-        type: choice
-        options:
-          - validate
-          - build
       compile_jobs:
-        description: "parallel jobs for the full build"
+        description: "parallel build jobs"
         required: true
         default: "2"
         type: choice
@@ -25,11 +17,10 @@ permissions:
 
 env:
   SOURCE_REPO: https://github.com/LiBwrt/openwrt-6.x.git
-  SOURCE_BRANCH: main-nss
   SOURCE_COMMIT: cf9444c1b20458687898489b36e1aebf56d9baf2
   KERNEL_SLOT_LIMIT: "6291456"
   DAEDE_REPO: https://github.com/kenzok8/openwrt-daede.git
-  DAEDE_REF: main
+  DAEDE_REF: v2026.07.09
   VMLINUX_BTF_REPO: https://github.com/kenzok8/vmlinux-btf.git
   VMLINUX_BTF_REF: main
   ATHENA_LED_REPO: https://github.com/NONGFAH/luci-app-athena-led.git
@@ -39,15 +30,15 @@ env:
 
 jobs:
   build:
-    name: RE-CS-02 / LiBwrt 6.12 / DAED / display
+    name: RE-CS-02 / DAED + display + WOL
     runs-on: ubuntu-22.04
-    timeout-minutes: 360
+    timeout-minutes: 420
 
     steps:
       - name: Checkout build project
         uses: actions/checkout@v4
 
-      - name: Validate clean project
+      - name: Validate project
         run: |
           set -euo pipefail
           find scripts -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
@@ -84,7 +75,7 @@ jobs:
           fi
           free -h
 
-      - name: Clone the exact known-good LiBwrt source commit
+      - name: Clone exact stable LiBwrt source
         run: |
           set -euo pipefail
           rm -rf openwrt
@@ -93,41 +84,27 @@ jobs:
           git -C openwrt remote add origin "$SOURCE_REPO"
           git -C openwrt fetch --depth=1 origin "$SOURCE_COMMIT"
           git -C openwrt checkout --detach FETCH_HEAD
+          test "$(git -C openwrt rev-parse HEAD)" = "$SOURCE_COMMIT"
 
-          ACTUAL="$(git -C openwrt rev-parse HEAD)"
-          test "$ACTUAL" = "$SOURCE_COMMIT"
-          echo "Pinned source commit: $ACTUAL"
-
-      - name: Audit source, device and physical kernel limit
+      - name: Audit source and physical kernel limit
         working-directory: openwrt
         run: |
           set -euo pipefail
-
-          grep -Eq 'KERNEL_PATCHVER[[:space:]]*:=[[:space:]]*6\.12' \
-            target/linux/qualcommax/Makefile
-
-          DEVICE_BLOCK="$(
-            sed -n '/^define Device\/jdcloud_re-cs-02$/,/^endef$/p' \
-              target/linux/qualcommax/image/ipq60xx.mk
-          )"
+          grep -Eq 'KERNEL_PATCHVER[[:space:]]*:=[[:space:]]*6\.12' target/linux/qualcommax/Makefile
+          DEVICE_BLOCK="$(sed -n '/^define Device\/jdcloud_re-cs-02$/,/^endef$/p' target/linux/qualcommax/image/ipq60xx.mk)"
           printf '%s\n' "$DEVICE_BLOCK"
+          KERNEL_SIZE_VALUE="$(printf '%s\n' "$DEVICE_BLOCK" | awk -F':=' '/^[[:space:]]*KERNEL_SIZE[[:space:]]*:=/ {gsub(/[[:space:]]/, "", $2); print $2; exit}')"
+          test "$KERNEL_SIZE_VALUE" = "6144k"
 
-          KERNEL_SIZE_VALUE="$(
-            printf '%s\n' "$DEVICE_BLOCK" |
-              awk -F':=' '
-                /^[[:space:]]*KERNEL_SIZE[[:space:]]*:=/ {
-                  gsub(/[[:space:]]/, "", $2)
-                  print $2
-                  exit
-                }
-              '
-          )"
-
-          if [ "$KERNEL_SIZE_VALUE" != "6144k" ]; then
-            echo "::error::Unexpected RE-CS-02 KERNEL_SIZE: ${KERNEL_SIZE_VALUE:-missing}"
-            exit 1
-          fi
-          echo "RE-CS-02 physical kernel slot confirmed: $KERNEL_SIZE_VALUE"
+      - name: Cache downloads and compiler cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            openwrt/dl
+            openwrt/.ccache
+          key: athena-final-v18-${{ runner.os }}-${{ env.SOURCE_COMMIT }}
+          restore-keys: |
+            athena-final-v18-${{ runner.os }}-
 
       - name: Update source feeds
         working-directory: openwrt
@@ -135,7 +112,7 @@ jobs:
           set -euo pipefail
           ./scripts/feeds update -a
 
-      - name: Add DAED, detached BTF and Athena display packages
+      - name: Add DAED, detached BTF and display packages
         run: |
           set -euo pipefail
           bash scripts/prepare_packages.sh "$GITHUB_WORKSPACE/openwrt"
@@ -146,32 +123,29 @@ jobs:
           set -euo pipefail
           ./scripts/feeds install -a -f
 
-      - name: Apply minimal defaults
+      - name: Inject safe RAM diagnostics and defaults
         run: |
           set -euo pipefail
-          bash scripts/apply_defaults.sh "$GITHUB_WORKSPACE/openwrt"
+          bash scripts/inject_runtime.sh "$GITHUB_WORKSPACE/openwrt"
 
-      - name: Apply and validate device configuration
+      - name: Apply and validate configuration
         working-directory: openwrt
         run: |
           set -euo pipefail
-          cp "$GITHUB_WORKSPACE/config/athena-minimal.config" .config
+          cp "$GITHUB_WORKSPACE/config/athena-final-candidate.config" .config
           make defconfig
-          bash "$GITHUB_WORKSPACE/scripts/verify_config.sh" \
-            .config package/custom/daed/Makefile
+          bash "$GITHUB_WORKSPACE/scripts/verify_config.sh" .config package/custom/daed/Makefile
           ./scripts/diffconfig.sh
 
       - name: Download build sources
-        if: inputs.build_mode == 'build'
         working-directory: openwrt
         run: |
           set -euo pipefail
           make download -j8 || make download -j1 V=s
           find dl -type f -size -1024c -delete || true
 
-      - name: Compile firmware
+      - name: Compile both images
         id: compile
-        if: inputs.build_mode == 'build'
         continue-on-error: true
         working-directory: openwrt
         run: |
@@ -179,61 +153,72 @@ jobs:
           JOBS="${{ inputs.compile_jobs }}"
           make -j"$JOBS" world 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
           RC="${PIPESTATUS[0]}"
-
           if [ "$RC" -ne 0 ] && [ "$JOBS" != "1" ]; then
             echo "Parallel build failed; retrying serially with verbose output."
             make -j1 V=s world 2>&1 | tee -a "$GITHUB_WORKSPACE/build.log"
             RC="${PIPESTATUS[0]}"
           fi
-
           echo "build_rc=$RC" >> "$GITHUB_OUTPUT"
           exit "$RC"
 
-      - name: Report persistent kernel image size
-        if: always() && inputs.build_mode == 'build'
+      - name: Report persistent kernel size
+        if: always()
         run: |
           set -euo pipefail
-          IMAGE="$(
-            find "$GITHUB_WORKSPACE/openwrt/build_dir" -type f \
-              -name 'jdcloud_re-cs-02-uImage.itb' -print -quit 2>/dev/null || true
-          )"
-
+          IMAGE="$(find "$GITHUB_WORKSPACE/openwrt/build_dir" -type f -name 'jdcloud_re-cs-02-uImage.itb' -print -quit 2>/dev/null || true)"
           if [ -n "$IMAGE" ] && [ -f "$IMAGE" ]; then
             SIZE="$(stat -c '%s' "$IMAGE")"
             MARGIN="$((KERNEL_SLOT_LIMIT - SIZE))"
             echo "persistent uImage.itb: $SIZE bytes"
             echo "physical HLOS limit:   $KERNEL_SLOT_LIMIT bytes"
             echo "remaining margin:      $MARGIN bytes"
-
             if [ "$SIZE" -gt "$KERNEL_SLOT_LIMIT" ]; then
               echo "::error::Persistent kernel is oversized by $((-MARGIN)) bytes."
               exit 1
             fi
           else
-            echo "::warning::No persistent RE-CS-02 uImage.itb was produced."
+            echo "::warning::No persistent kernel image was produced."
           fi
 
-      - name: Collect firmware and diagnostics
+      - name: Extract useful error context
         if: always()
         run: |
           set -euo pipefail
-          bash scripts/collect_output.sh \
-            "$GITHUB_WORKSPACE/openwrt" \
-            "$GITHUB_WORKSPACE/output"
-          cp -a build.log output/diagnostics/ 2>/dev/null || true
+          mkdir -p pre-output
+          if [ -f build.log ]; then
+            {
+              echo "=== first useful error lines ==="
+              grep -nE 'ERROR:|check_data_file_clashes|conflicts:|Cannot install package|Kernel image .* too big|Error [0-9]+' build.log | head -n 120 || true
+              echo
+              echo "=== final 300 lines ==="
+              tail -n 300 build.log
+            } > pre-output/ERROR_CONTEXT.txt
+          else
+            echo "build.log was not created" > pre-output/ERROR_CONTEXT.txt
+          fi
 
-      - name: Upload build artifact
+      # Artifact includes initramfs-uImage.itb and squashfs-sysupgrade.bin.
+      - name: Collect both images and diagnostics
+        if: always()
+        run: |
+          set -euo pipefail
+          bash scripts/collect_output.sh "$GITHUB_WORKSPACE/openwrt" "$GITHUB_WORKSPACE/output"
+          cp -a pre-output/. output/diagnostics/ 2>/dev/null || true
+          cp -a build.log output/diagnostics/ 2>/dev/null || true
+          cp -a scripts/verify_after_flash.sh output/verify-after-flash.sh 2>/dev/null || true
+
+      - name: Upload one artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Athena-AX6600-Minimal-DAED-${{ github.run_number }}
+          name: Athena-AX6600-DAED-WOL-Final-Candidate-${{ github.run_number }}
           path: output/
-          if-no-files-found: error
           retention-days: 14
+          if-no-files-found: error
           compression-level: 6
 
       - name: Mark failed compilation
-        if: inputs.build_mode == 'build' && steps.compile.outcome == 'failure'
+        if: steps.compile.outcome == 'failure'
         run: |
-          echo "::error::Firmware compilation failed. Download the artifact for build.log."
+          echo "::error::Compilation failed. Download build.log and ERROR_CONTEXT.txt."
           exit 1

@@ -1,14 +1,24 @@
 {
-  "project": "Athena AX6600 RAM Diagnostic",
-  "version": "v16",
+  "project": "Athena AX6600 DAED WOL Final Candidate",
+  "project_version": "v18",
   "device": "JDCloud RE-CS-02",
   "target": "qualcommax/ipq60xx",
   "source_repo": "https://github.com/LiBwrt/openwrt-6.x.git",
   "source_commit": "cf9444c1b20458687898489b36e1aebf56d9baf2",
-  "purpose": "RAM-only boot diagnostic without DAED, BTF or display packages",
-  "persistent_images_uploaded": false,
-  "expected_lan_ip": "192.168.1.1",
-  "safety": "Artifact contains only initramfs FIT image and diagnostics",
-  "fix": "remove overlapping ath11k-firmware-qcn9074-ddwrt package",
-  "diagnostics": "always upload build.log and ERROR_CONTEXT.txt"
+  "daede_ref": "v2026.07.09",
+  "build_outputs": [
+    "initramfs-uImage.itb",
+    "squashfs-sysupgrade.bin"
+  ],
+  "features": [
+    "daed",
+    "luci-app-daede",
+    "detached vmlinux-btf",
+    "luci-app-athena-led",
+    "luci-app-wol",
+    "etherwake",
+    "luci-i18n-wol-zh-cn"
+  ],
+  "safety": "Test full-feature initramfs before using the sysupgrade from the same artifact",
+  "wol_scope": "Wake wired LAN computers/NAS; remote access to LuCI still requires a secure VPN or equivalent"
 }
