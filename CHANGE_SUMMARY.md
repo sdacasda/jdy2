@@ -1,19 +1,47 @@
-# v19.0.0-rc1 变更摘要
+# Athena v19.0.0-rc1 变更摘要
 
-## fixed3：OpenWrt 本地包注册修复
+## 本次：OpenWrt 包注册诊断
 
-第三次公开构建确认：种子配置已经选择 `athena-runtime`，但该选项在
-`make defconfig` 后被移除。本版本会在 feeds 建立元数据之前先放入
-`athena-runtime` 与 `luci-app-athena`；该步骤可重复执行并拒绝产生嵌套包目录。
-运行 `defconfig` 前还会清理旧的 OpenWrt 包元数据，强制重新扫描本地包。
-若配置阶段仍失败，诊断 Artifact 会额外包含 Athena 包元数据和包扫描日志。
+GitHub Actions 第四次构建的 Artifact 已证明：
 
-新增 Athena 运行时包、LuCI 管理应用、Argon/DAED 同源面板、恢复入口、配置模板、独立 IoT 2.4G SSID、备份回滚、健康检查、不可变源码锁和严格产物验证。
+- `athena-runtime` 已进入 OpenWrt 合并后的 `tmp/.packageinfo`。
+- 源配置已选择 `CONFIG_PACKAGE_athena-runtime=y` 和
+  `CONFIG_PACKAGE_luci-app-athena=y`。
+- `make defconfig` 后两个选项均从有效配置中消失。
+- `athena-runtime` 的直接与传递依赖可以正常生成 Kconfig，
+  没有发现会隐藏该包的依赖条件。
 
-DAED 上游原计划版本 `v2026.07.09` 已不存在，因此源码锁使用当前可验证的 `v2026.07.26` 提交 `b16dbbd3f94558c30d9a875c7e8daf91d4718747`。
+因此，故障已缩小到 OpenWrt 从包元数据生成 Kconfig，以及 Kconfig
+解析源配置的边界。上一份 Artifact 没有保存实际使用的
+`tmp/.config-package.in`，无法再从现有材料判断是哪一侧丢失。
 
-上传整个源码目录到 GitHub 后运行 v19 工作流。先下载 test Artifact、校验、测试 initramfs，再考虑 sysupgrade。真机验证通过后可发布 `v19.0.0-rc1`，稳定后再发布 `v19.0.0`。
+本次增加：
 
-工作流已兼容 Windows/GitHub 上传导致的可执行位丢失，并升级到 Node 24 兼容的 `actions/checkout@v5` 与 `actions/upload-artifact@v6`。重新上传修订版时应覆盖整个源码目录。
+- 在 `defconfig` 前显式执行并完成 `prepare-tmpinfo`。
+- 在 `defconfig` 前后分别保存：
+  - 完整 `tmp/.packageinfo`
+  - 实际 `tmp/.config-package.in`
+  - 由同一份 `.packageinfo` 重新计算的 Kconfig
+  - Athena 两个本地包的独立扫描元数据
+  - 当时的 `.config`
+- 生成简短的 `registration-summary.txt`，直接显示两个包在每一层是否存在。
+- 无论构建成功或失败，都把上述文件放入 GitHub Artifact。
+- 新增行为回归测试，验证“实际 Kconfig 与重新计算结果不一致”时证据不会丢失。
 
-第二次云端验证已确认源码锁和包准备阶段通过。OpenWrt Web 栈改为只选择 `nginx-ssl`，有效配置校验接受正确的 SSL 变体；defconfig 和配置核验现已分成两个步骤，失败 Artifact 会保存 seed、effective config 和 diffconfig。
+这是一版有明确目的的诊断构建，不宣称已经通过完整云端固件编译。
+下一次 GitHub Actions 运行会直接确认最终根因；如果显式
+`prepare-tmpinfo` 同时消除了时序问题，构建也会继续进入固件编译。
+
+## 保持不变
+
+- LAN：`192.168.50.1`
+- DAED 默认关闭，仅监听 `127.0.0.1:2023`
+- Argon 默认深色并保留配置能力
+- 不内置 SmartDNS
+- 国内直连、国外代理
+- 国内 UDP DNS、国外代理 DoH、节点 bootstrap 直连
+- Steam 下载、游戏与 BT 选择性直连
+- 保留 NSS 与 Wi-Fi offload，停止 ECM frontend 和 flow offload
+- 独立 2.4 GHz IoT SSID
+- `athena-setup`、`athena-health`、`athena-backup`、
+  `athena-rollback`、`athena-runtime`

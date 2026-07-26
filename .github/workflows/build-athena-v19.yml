@@ -77,9 +77,12 @@ jobs:
       - name: Generate effective OpenWrt config
         id: defconfig
         run: |
+          make -C openwrt prepare-tmpinfo
+          bash scripts/capture_package_registration.sh openwrt package-registration/pre-defconfig
           cp config/athena-v19.config openwrt/.config
           make -C openwrt defconfig
           cp openwrt/.config effective.config
+          bash scripts/capture_package_registration.sh openwrt package-registration/post-defconfig
       - name: Verify effective OpenWrt config
         id: configcheck
         run: |
@@ -109,6 +112,9 @@ jobs:
             openwrt/scripts/diffconfig.sh > "$OUTPUT/diagnostics/diffconfig" 2>/dev/null || true
             grep -A30 -B5 '^Package: athena-runtime$' openwrt/tmp/.packageinfo \
               > "$OUTPUT/diagnostics/athena-runtime-packageinfo.txt" 2>/dev/null || true
+            if [ -d package-registration ]; then
+              cp -a package-registration "$OUTPUT/diagnostics/"
+            fi
             if [ -d openwrt/logs/package/custom ]; then
               cp -a openwrt/logs/package/custom "$OUTPUT/diagnostics/package-scan-logs"
             fi

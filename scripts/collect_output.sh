@@ -18,6 +18,8 @@ done
 cp "$PROJECT_ROOT/SOURCES.lock.json" "$PROJECT_ROOT/PROJECT.json" "$OUTPUT/metadata/"
 cp "$TOPDIR/.config" "$OUTPUT/metadata/effective.config" 2>/dev/null || true
 "$TOPDIR/scripts/diffconfig.sh" >"$OUTPUT/metadata/diffconfig" 2>/dev/null || true
+[ ! -d "$PROJECT_ROOT/package-registration" ] ||
+	cp -a "$PROJECT_ROOT/package-registration" "$OUTPUT/diagnostics/"
 cp "$PROJECT_ROOT/scripts/verify_after_flash.sh" "$PROJECT_ROOT/scripts/verify_checksums.sh" "$OUTPUT/tools/"
 for f in FLASH.md SETUP.md RECOVERY.md IOT_WIFI.md; do [ ! -f "$PROJECT_ROOT/docs/$f" ] || cp "$PROJECT_ROOT/docs/$f" "$OUTPUT/docs/"; done
 printf 'version=19.0.0-rc1\nbuild_time_utc=%s\n' "$(date -u +%FT%TZ)" >"$OUTPUT/metadata/BUILD_INFO.txt"

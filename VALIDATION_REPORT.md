@@ -1,50 +1,63 @@
 # Athena v19.0.0-rc1 验证报告
 
-## fixed3 验证
+验证日期：2026-07-27
 
-- 先以失败单元测试复现“本地包晚于 feeds 元数据生成”的顺序问题。
-- 本地包现已在 `feeds update -a` 前放入 OpenWrt。
-- 重复放入测试通过，不会形成嵌套包目录。
-- `defconfig` 前会清理临时包元数据。
-- Python 测试：21/21 通过。
-- 运行时 Shell 测试：7/7 通过。
-- 项目、模板、包布局、Web 配置与敏感信息扫描全部通过。
-- 完整 LiBwrt 固件编译仍必须由 GitHub Actions 完成，是下一道验证门槛。
+## 本次输入证据
 
-验证日期：2026-07-26
+检查了用户提供的 `Athena-AX6600-v19-4-test.zip`：
+
+- SHA-256：
+  `9C9FECDF69A8EF8409133CFA917F530B1C0CD63BE8FF8F3C6F2F90DC51FF4096`
+- Artifact 中的 `athena-runtime-packageinfo.txt` 证明包扫描成功。
+- `seed.config` 选择了两个 Athena 本地包。
+- `effective.config` 中两个选项完全消失。
+- `curl`、`gzip` 等可选依赖也未被选中，与运行时包没有进入最终
+  Kconfig 解析结果相符。
+
+另外以锁定的 LiBwrt 源码和相同本地包做了元数据级验证：
+
+- `athena-runtime` Makefile 可独立输出合法包元数据。
+- `luci-app-athena` Makefile 可独立输出合法包元数据。
+- 从 `athena-runtime` 及其依赖生成的 Kconfig 中，该选项为可见
+  `tristate`，没有额外 `depends on` 限制。
+- 已检查已锁定 feeds，没有发现第二个同名 `athena-runtime` 包。
 
 ## 已通过
 
-- Python 单元测试：17/17
+- Python 测试：22/22
 - OpenWrt 运行时 Shell 测试：7/7
 - 所有项目 Shell 脚本与运行时命令静态语法检查
-- 项目结构与不可变源码锁检查
-- DAED DNS/路由模板与域名列表验证
+- 项目结构与不可变源码锁验证
+- DAED DNS、路由模板与域名列表验证
 - 本地 OpenWrt 包布局验证
-- Nginx、LuCI、DAED 环回代理与恢复入口配置验证
+- Nginx、LuCI、DAED 反向代理与恢复入口配置验证
 - 敏感信息扫描
-- v19 固件 seed 配置与禁用包检查
-- Git 工作树清洁性与脚本可执行权限检查
-- Windows/GitHub 上传丢失可执行位的恢复测试
+- 包注册诊断脚本的行为回归测试
+- `git diff --check`
 
-## 未在本机完成
+## 尚未完成
 
-- 未执行完整 LiBwrt/OpenWrt 编译。该步骤需要 Ubuntu 22.04 GitHub Actions 环境，预计耗时数小时。
-- 未生成或验证真实 initramfs/sysupgrade 二进制；工作流会在缺少任一镜像、内核超过 6 MiB、必需包缺失或禁用包出现时失败。
-- 未在 RE-CS-02 真机验证三路 Wi-Fi、NSS、DAED 代理、8080 恢复入口和独立 IoT SSID。
-- 未用真实智能家居完成关联、DHCP、长期在线与重连测试。
+- Windows 本机无法提供 OpenWrt 所要求的区分大小写 Linux
+  文件系统和完整 Ubuntu 构建依赖，因此未在本机执行完整 LiBwrt
+  固件编译。
+- 本次新增的 `prepare-tmpinfo` 显式步骤及完整诊断采集仍需
+  GitHub Actions 的 Ubuntu 22.04 环境验证。
+- 尚未生成或真机测试新的 initramfs/sysupgrade 镜像。
 
-这些未完成项是发布 `v19.0.0` 前的硬门槛。当前源码适合作为 `v19.0.0-rc1` 上传并运行 test Artifact 构建，不应在未测试 initramfs 的情况下直接刷写 sysupgrade。
+## 下一次构建如何判断
 
-## 已知设计取舍
+下载新的 GitHub Artifact，查看：
 
-- DAED 原计划标签 `v2026.07.09` 已不存在；锁定文件改用可验证的 `v2026.07.26` 对应提交。
-- SmartDNS 不内置，DNS 分流由 DAED 单独承担。
-- ECM L3/L4 frontend 与 Flow Offload 停止，但 NSS 数据面及 Wi-Fi offload 保留。
-- IoT SSID 加入现有 LAN，不启用客户端隔离或独立 VLAN，以兼容局域网发现和控制。
+```text
+diagnostics/package-registration/pre-defconfig/registration-summary.txt
+diagnostics/package-registration/post-defconfig/registration-summary.txt
+```
 
-## RC1 工作流修订
+判断：
 
-首次公开构建在 `Validate source project` 阶段暴露出 Windows/GitHub 上传将脚本保存为 `100644` 的平台差异。工作流现在会在测试前恢复执行权限，OpenWrt 包安装阶段也会强制把运行时命令设置为 `0755`。前置校验失败时，Artifact 收集会生成明确诊断文件，不再因缺少 `openwrt` 目录产生第二个无关错误。
+- `actual ... present` 且最终配置仍缺失：问题位于 Kconfig 解析阶段。
+- `actual ... missing`、`recomputed ... present`：OpenWrt 使用了过期或
+  不完整的 `.config-package.in`。
+- 两处均 `present` 且构建继续：显式元数据准备消除了原来的时序问题。
 
-第二次公开构建到达 OpenWrt 配置阶段，暴露出 Nginx 包变体核验问题：`luci-ssl-nginx` 使用 `nginx-ssl`，而旧校验只接受基础 `nginx`。seed 已移除互斥的基础变体，核验改为接受实际的 SSL 变体；工作流也将 defconfig 与有效配置核验拆开，并在诊断 Artifact 中保留 seed、effective config 和 diffconfig。
+在 GitHub 完整构建和 initramfs 真机验证通过前，不应刷写 sysupgrade。

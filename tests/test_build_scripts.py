@@ -1,5 +1,6 @@
 from pathlib import Path
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -29,9 +30,11 @@ class BuildScriptTests(unittest.TestCase):
    script=str(ROOT/"scripts/stage_local_packages.sh")
    argument=str(topdir)
    if os.name=="nt":
-    script=subprocess.check_output(["cygpath","-u",script],text=True).strip()
-    argument=subprocess.check_output(["cygpath","-u",argument],text=True).strip()
-    command=["bash","-lc",f"'{script}' '{argument}'"]
+    cygpath=shutil.which("cygpath") or r"D:\Git\usr\bin\cygpath.exe"
+    bash=shutil.which("bash") or r"D:\Git\bin\bash.exe"
+    script=subprocess.check_output([cygpath,"-u",script],text=True).strip()
+    argument=subprocess.check_output([cygpath,"-u",argument],text=True).strip()
+    command=[bash,"-lc",f"'{script}' '{argument}'"]
    else:
     command=["bash",script,argument]
    subprocess.run(command,cwd=ROOT,check=True,capture_output=True,text=True)
