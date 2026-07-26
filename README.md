@@ -1,61 +1,54 @@
-# Athena AX6600 DAED + WOL Final Candidate v18
+# Athena AX6600 DAED v19.0.0-rc1
 
-这版只需要跑一次 GitHub Actions，随后同一个 Artifact 同时提供：
+京东云雅典娜 RE-CS-02 的稳定优先固件构建项目。一次 GitHub Actions 构建同时产生 initramfs 测试镜像和 sysupgrade 镜像。
 
-- 完整功能的 `initramfs-uImage.itb`
-- 对应的 `squashfs-sysupgrade.bin`
+## 安全默认值
 
-内置 DAED、luci-app-daede、匹配内核的外置 BTF、雅典娜点阵屏、中文 LuCI，以及网络唤醒 `luci-app-wol + etherwake`。
+- LAN：`192.168.50.1/24`
+- DAED 默认关闭，只监听 `127.0.0.1:2023`
+- LuCI 使用 Argon 深色主题，Bootstrap 保留为恢复主题
+- DAED 通过 LuCI 的 `服务 → Athena 优化 → DAED 面板` 同源访问
+- 恢复入口：`http://192.168.50.1:8080/`
+- SmartDNS、OpenClash、PassWall、HomeProxy 不内置
+- 保留 NSS 数据面和 Wi-Fi offload，停止 ECM frontend 与 Flow Offload
+- 独立 2.4 GHz IoT SSID 默认关闭
 
-v17 保留了 v16 已经在真机验证成功的应急有线网络逻辑。完整功能 initramfs 即使标准 LAN 初始化异常，也会尝试让所有有线口响应 `192.168.1.1`。
+## 网络策略
 
-DAED 和屏幕服务默认不自动启动。先确认 RAM 系统稳定，再逐项测试。
+国内 IPv4/IPv6 直连；国外流量进入用户选择的 DAED 代理组。国内域名使用直连 UDP DNS，国外域名使用经代理的 DoH，节点及订阅域名使用直连 bootstrap DNS，避免解析回环。
 
-## 编译
+Steam 商店/登录可代理，下载 CDN 可直连；指定游戏设备 UDP、Minecraft 和带 DSCP `0x4` 的 BT 流量可选择直连。
 
-上传整个项目后运行：
+## 构建与刷写
 
-`Actions → Build Athena DAED Final Candidate → Run workflow`
+1. 上传整个仓库到 GitHub。
+2. 运行 `Build Athena AX6600 DAED v19` 工作流。
+3. 下载 Artifact 并校验 SHA-256。
+4. **先用 U-Boot 启动 `athena-v19-initramfs-uImage.itb`。**
+5. 真机验证通过后，才可刷写 `athena-v19-squashfs-sysupgrade.bin`。
 
-参数仅选：
-
-`compile_jobs = 2`
-
-## 测试
-
-先在 U-Boot `/uimage.html` 上传 `*initramfs*uImage.itb`。
-
-启动后打开：
-
-- `http://192.168.1.1/diag.html`
-- `http://192.168.1.1/cgi-bin/luci/`
-
-SSH 后运行：
+从 v18 迁移必须不保留旧配置：
 
 ```sh
-athena-feature-check
+sysupgrade -n /tmp/athena-v19-squashfs-sysupgrade.bin
 ```
 
-显示屏测试：
+## 首次设置
+
+导入自己的节点后运行：
 
 ```sh
-uci set athena_led.config.enable='1'
-uci commit athena_led
-/etc/init.d/athena_led restart
+athena-setup
+athena-health --verbose
 ```
 
-断电正常上电可回到 ZqinKing 固件。只有完整功能 RAM 镜像持续稳定，才使用同一 Artifact 中的 `squashfs-sysupgrade.bin`，并且不保留设置。
-
-## 网络唤醒
-
-LuCI 中使用：
-
-`网络 → 网络唤醒`
-
-命令行测试：
+IoT 设备连不上主 Wi-Fi 时，创建兼容网络：
 
 ```sh
-etherwake -i br-lan AA:BB:CC:DD:EE:FF
+athena-iot setup
+athena-iot diagnose
 ```
 
-把示例 MAC 地址替换为电脑有线网卡的 MAC。该功能负责在家中局域网发送魔术包；从外网访问路由器后台仍应通过安全 VPN，而不是把 LuCI 直接暴露到公网。
+详细说明见 [docs/FLASH.md](docs/FLASH.md)、[docs/SETUP.md](docs/SETUP.md)、[docs/IOT_WIFI.md](docs/IOT_WIFI.md) 和 [docs/RECOVERY.md](docs/RECOVERY.md)。
+
+> 刷机有风险。正式刷写前必须备份校准分区和现有固件，并完成 initramfs 真机测试。

@@ -1,0 +1,2 @@
+#!/bin/sh
+exec "$PYTHON" "$PROJECT_ROOT/tests/host-bin/sha256sum.py" "$@"

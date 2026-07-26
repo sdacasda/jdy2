@@ -1,0 +1,12 @@
+#!/bin/sh
+fail=0
+check() { if eval "$2" >/dev/null 2>&1; then echo "[PASS] $1"; else echo "[FAIL] $1"; fail=1; fi; }
+check "DAED binary" "test -x /usr/bin/daed"
+check "Athena setup" "test -x /usr/bin/athena-setup"
+check "Athena IoT tool" "test -x /usr/bin/athena-iot"
+check "Argon theme" "test -d /www/luci-static/argon"
+check "Nginx" "command -v nginx"
+check "BTF" "test -r /sys/kernel/btf/vmlinux || test -r /usr/lib/debug/boot/vmlinux"
+check "ECM debugfs" "test -d /sys/kernel/debug/ecm"
+check "NSS modules" "lsmod | grep -q qca_nss"
+exit "$fail"

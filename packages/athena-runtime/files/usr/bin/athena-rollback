@@ -1,0 +1,47 @@
+#!/bin/sh
+set -eu
+
+ATHENA_LIBDIR="${ATHENA_LIBDIR:-/usr/lib/athena}"
+. "$ATHENA_LIBDIR/backup.sh"
+
+component=all
+if [ "${1:-}" = "--component" ]; then
+	[ "$#" -eq 3 ] || athena_die "usage: athena-rollback --component daed BACKUP_ID"
+	component="$2"
+	id="$3"
+else
+	id="${1:-}"
+fi
+case "$component" in all|daed) ;; *) athena_die "unknown rollback component" ;; esac
+case "$id" in ""|*/*|*\\*|.|..) athena_die "invalid backup ID" ;; esac
+
+root="$(athena_root /root/athena-backups)"
+[ -n "$id" ] || id="$(athena_backup_latest)"
+case "$id" in /*) directory="$id" ;; *) directory="$root/$id" ;; esac
+athena_backup_verify "$directory" || athena_die "backup checksum verification failed"
+athena_lock rollback || athena_die "another rollback is running"
+trap 'athena_unlock' EXIT INT TERM
+
+restore_archive() {
+	archive="$1"
+	[ -f "$archive" ] || return 0
+	tar -xzf "$archive" -C "$(athena_root /)"
+}
+
+if [ "$component" = daed ]; then
+	restore_archive "$directory/daed-database.tar.gz"
+else
+	restore_archive "$directory/etc-config.tar.gz"
+	restore_archive "$directory/daed-database.tar.gz"
+	restore_archive "$directory/web-config.tar.gz"
+	restore_archive "$directory/runtime-config.tar.gz"
+fi
+
+if [ "$ATHENA_ROOT" = "/" ]; then
+	/etc/init.d/rpcd restart 2>/dev/null || true
+	/etc/init.d/uhttpd restart 2>/dev/null || true
+	/etc/init.d/nginx restart 2>/dev/null || true
+fi
+athena_unlock
+trap - EXIT INT TERM
+echo "rollback restored from ${directory##*/}"

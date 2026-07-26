@@ -1,0 +1,5 @@
+# Steam account, store, help, and community
+store.steampowered.com
+steamcommunity.com
+help.steampowered.com
+login.steampowered.com

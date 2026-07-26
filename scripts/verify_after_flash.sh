@@ -1,15 +1,12 @@
 #!/bin/sh
-set -u
 fail=0
-ok(){ printf '[OK] %s\n' "$1"; }
-bad(){ printf '[FAIL] %s\n' "$1"; fail=1; }
-
-board="$(ubus call system board 2>/dev/null)"
-echo "$board" | grep -q '"board_name": "jdcloud,re-cs-02"' && ok "board is jdcloud,re-cs-02" || bad "unexpected board"
-case "$(uname -r)" in 6.12.*) ok "kernel is 6.12: $(uname -r)" ;; *) bad "unexpected kernel: $(uname -r)" ;; esac
-command -v athena-feature-check >/dev/null 2>&1 && athena-feature-check || bad "athena-feature-check failed or missing"
-if [ -e /dev/mmcblk0p16 ]; then
-  hlos_bytes="$(blockdev --getsize64 /dev/mmcblk0p16 2>/dev/null || echo unknown)"
-  [ "$hlos_bytes" = "6291456" ] && ok "HLOS remains 6 MiB" || bad "unexpected HLOS size: $hlos_bytes"
-fi
+check(){ if eval "$2" >/dev/null 2>&1; then echo "[PASS] $1"; else echo "[$3] $1"; [ "$3" != FAIL ] || fail=1; fi; }
+check "LAN is 192.168.50.1" "[ \"$(uci -q get network.lan.ipaddr)\" = 192.168.50.1 ]" FAIL
+check "DAED is loopback-only" "[ \"$(uci -q get daed.config.listen_addr)\" = 127.0.0.1:2023 ]" FAIL
+check "Athena commands installed" "command -v athena-setup && command -v athena-health && command -v athena-iot" FAIL
+check "Argon installed" "test -d /www/luci-static/argon" FAIL
+check "Recovery listener configured" "uci show uhttpd | grep -q 192.168.50.1:8080" WARN
+check "BTF available" "test -r /sys/kernel/btf/vmlinux || test -r /usr/lib/debug/boot/vmlinux" FAIL
+check "Three wireless PHYs" "[ \"$(find /sys/class/ieee80211 -mindepth 1 -maxdepth 1 2>/dev/null | wc -l)\" -ge 3 ]" WARN
+athena-health --verbose || fail=1
 exit "$fail"

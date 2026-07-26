@@ -1,0 +1,33 @@
+#!/bin/sh
+set -eu
+ATHENA_LIBDIR="${ATHENA_LIBDIR:-/usr/lib/athena}"
+. "$ATHENA_LIBDIR/common.sh"
+. "$ATHENA_LIBDIR/backup.sh"
+. "$ATHENA_LIBDIR/iot.sh"
+
+cmd="${1:-status}"; shift || true
+case "$cmd" in
+	validate) athena_iot_validate "${1:-}" "${2:-}" "${3:-}" ;;
+	setup)
+		ssid="${ATHENA_IOT_SSID:-}"; key="${ATHENA_IOT_KEY:-}"; channel="${ATHENA_IOT_CHANNEL:-6}"
+		[ -n "$ssid" ] || { printf 'IoT SSID: '; read -r ssid; }
+		[ -n "$key" ] || { printf 'IoT passphrase (8-63 chars): '; stty -echo 2>/dev/null || true; read -r key; stty echo 2>/dev/null || true; echo; }
+		athena_iot_apply "$ssid" "$key" "$channel"
+		;;
+	status) athena_iot_status ;;
+	diagnose) athena_iot_diagnose ;;
+	disable)
+		athena_backup_create iot-disable >/dev/null
+		section="$(athena_uci_get athena.main.iot_section athena_iot)"
+		uci -q set "wireless.$section.disabled=1"; uci -q set athena.main.iot_enabled=0
+		uci -q commit wireless; uci -q commit athena; wifi reload
+		;;
+	remove)
+		[ "${1:-}" = "--yes" ] || { echo "Use: athena-iot remove --yes" >&2; exit 64; }
+		athena_backup_create iot-remove >/dev/null
+		section="$(athena_uci_get athena.main.iot_section athena_iot)"
+		uci -q delete "wireless.$section"; uci -q set athena.main.iot_enabled=0
+		uci -q commit wireless; uci -q commit athena; wifi reload
+		;;
+	*) echo "usage: athena-iot {setup|status|diagnose|disable|remove --yes}" >&2; exit 64 ;;
+esac

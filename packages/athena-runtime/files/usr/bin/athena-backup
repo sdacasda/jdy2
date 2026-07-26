@@ -1,0 +1,26 @@
+#!/bin/sh
+set -eu
+
+ATHENA_LIBDIR="${ATHENA_LIBDIR:-/usr/lib/athena}"
+. "$ATHENA_LIBDIR/backup.sh"
+
+case "${1:-}" in
+	--list)
+		root="$(athena_root /root/athena-backups)"
+		find "$root" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort -r | while read -r directory; do
+			status=invalid
+			athena_backup_verify "$directory" && status=verified
+			printf '%s %s\n' "${directory##*/}" "$status"
+		done
+		;;
+	--verify)
+		[ "$#" -eq 2 ] || athena_die "usage: athena-backup --verify DIRECTORY"
+		athena_backup_verify "$2"
+		;;
+	-h|--help)
+		echo "usage: athena-backup [LABEL] | --list | --verify DIRECTORY"
+		;;
+	*)
+		athena_backup_create "${1:-manual}"
+		;;
+esac

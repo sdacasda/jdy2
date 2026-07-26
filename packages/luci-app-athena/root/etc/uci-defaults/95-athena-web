@@ -1,0 +1,20 @@
+#!/bin/sh
+uci -q batch <<'UCI'
+set daed.config.listen_addr='127.0.0.1:2023'
+set daed.config.enabled='0'
+set luci.main.mediaurlbase='/luci-static/argon'
+set luci.main.lang='auto'
+set uhttpd.recovery='uhttpd'
+add_list uhttpd.recovery.listen_http='192.168.50.1:8080'
+set uhttpd.recovery.home='/www'
+set uhttpd.recovery.rfc1918_filter='1'
+commit daed
+commit luci
+commit uhttpd
+UCI
+/etc/init.d/daed disable >/dev/null 2>&1 || true
+/etc/init.d/daed stop >/dev/null 2>&1 || true
+nginx -t >/dev/null 2>&1 && /etc/init.d/nginx reload >/dev/null 2>&1 || logger -t athena-web "nginx validation failed; recovery uhttpd remains available"
+/etc/init.d/uhttpd enable >/dev/null 2>&1 || true
+/etc/init.d/uhttpd restart >/dev/null 2>&1 || true
+exit 0

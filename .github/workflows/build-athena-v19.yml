@@ -1,0 +1,92 @@
+name: Build Athena AX6600 DAED v19
+on:
+  workflow_dispatch:
+    inputs:
+      compile_jobs:
+        description: Parallel jobs
+        required: true
+        default: "2"
+        type: choice
+        options: [ "1", "2" ]
+      build_profile:
+        description: Runtime profile
+        required: true
+        default: stable
+        type: choice
+        options: [ stable, performance ]
+      release_stage:
+        description: Artifact stage
+        required: true
+        default: test
+        type: choice
+        options: [ test, candidate ]
+permissions:
+  contents: read
+env:
+  KERNEL_SLOT_LIMIT: "6291456"
+  KERNEL_MARGIN_WARNING: "131072"
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 420
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate source project
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p 'test_*.py' -v
+          bash scripts/test_runtime_scripts.sh
+          python3 scripts/verify_project.py --root .
+          python3 scripts/verify_templates.py --templates packages/athena-runtime/files/usr/share/athena/templates --rules packages/athena-runtime/files/usr/share/athena/rules
+          python3 scripts/verify_package_layout.py --root .
+          python3 scripts/verify_web_config.py --root .
+          python3 scripts/security_check.py --root .
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang flex bison g++ gawk gcc-multilib g++-multilib gettext git libncurses-dev libssl-dev python3 rsync swig unzip zlib1g-dev file wget libelf-dev jq curl ccache xsltproc patch perl
+      - name: Clone immutable LiBwrt source
+        run: |
+          REPO="$(jq -r '.libwrt.repository' SOURCES.lock.json)"
+          COMMIT="$(jq -r '.libwrt.commit' SOURCES.lock.json)"
+          git clone --filter=blob:none --no-checkout "$REPO" openwrt
+          git -C openwrt fetch --depth=1 origin "$COMMIT"
+          git -C openwrt checkout --detach FETCH_HEAD
+          test "$(git -C openwrt rev-parse HEAD)" = "$COMMIT"
+      - name: Prepare feeds and locked packages
+        run: |
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          cd ..
+          bash scripts/prepare_packages.sh openwrt
+          bash scripts/inject_runtime.sh openwrt
+      - name: Configure
+        run: |
+          cp config/athena-v19.config openwrt/.config
+          make -C openwrt defconfig
+          bash scripts/verify_config.sh openwrt/.config openwrt/package/custom/daed/Makefile
+      - name: Build both images
+        id: compile
+        continue-on-error: true
+        run: |
+          make -C openwrt download -j2
+          make -C openwrt -j"${{ inputs.compile_jobs }}" V=s 2>&1 | tee build.log
+      - name: Inspect firmware
+        id: inspect
+        continue-on-error: true
+        run: python3 scripts/inspect_firmware.py --openwrt openwrt --output inspection --kernel-limit 6291456
+      - name: Collect artifact
+        if: always()
+        run: bash scripts/collect_output.sh openwrt "Athena-AX6600-v19-${{ github.run_number }}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Athena-AX6600-v19-${{ github.run_number }}-${{ inputs.release_stage }}
+          path: Athena-AX6600-v19-${{ github.run_number }}
+          retention-days: 14
+      - name: Enforce build result
+        if: always()
+        run: |
+          test "${{ steps.compile.outcome }}" = success
+          test "${{ steps.inspect.outcome }}" = success

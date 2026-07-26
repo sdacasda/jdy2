@@ -1,0 +1,34 @@
+{
+  "libwrt": {
+    "repository": "https://github.com/LiBwrt/openwrt-6.x.git",
+    "commit": "cf9444c1b20458687898489b36e1aebf56d9baf2"
+  },
+  "daede": {
+    "repository": "https://github.com/kenzok8/openwrt-daede.git",
+    "commit": "b16dbbd3f94558c30d9a875c7e8daf91d4718747"
+  },
+  "vmlinux_btf": {
+    "repository": "https://github.com/kenzok8/vmlinux-btf.git",
+    "commit": "1a49c56863d59be0a9d317b0de98ff5f32091274"
+  },
+  "athena_led": {
+    "repository": "https://github.com/NONGFAH/luci-app-athena-led.git",
+    "commit": "f8eeb3119008ac0e429fc642c125512f9253ec1b"
+  },
+  "golang": {
+    "repository": "https://github.com/sbwml/packages_lang_golang.git",
+    "commit": "3757065cca28b7fbe0e1667040412990770ca2f4"
+  },
+  "argon": {
+    "repository": "https://github.com/jerrykuku/luci-theme-argon.git",
+    "commit": "6e4ad583c1a57c6e002a60dd105656fcfa876910"
+  },
+  "argon_config": {
+    "repository": "https://github.com/jerrykuku/luci-app-argon-config.git",
+    "commit": "3e099a37c3f71d0de677f1b6b0f4bffd57d91dac"
+  },
+  "geodata": {
+    "repository": "https://github.com/xiaorouji/openwrt-passwall-packages.git",
+    "commit": "9d391e568d61c43be683b747b9ede811a61fc315"
+  }
+}

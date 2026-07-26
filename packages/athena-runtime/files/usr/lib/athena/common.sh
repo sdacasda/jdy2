@@ -1,0 +1,94 @@
+#!/bin/sh
+
+ATHENA_ROOT="${ATHENA_ROOT:-/}"
+ATHENA_LOCK_PATH=""
+
+athena_root() {
+	case "$1" in
+		/*) printf '%s%s\n' "${ATHENA_ROOT%/}" "$1" ;;
+		*) printf '%s/%s\n' "${ATHENA_ROOT%/}" "$1" ;;
+	esac
+}
+
+athena_log() {
+	level="$1"
+	shift
+	message="$(printf '%s' "$*" | athena_redact)"
+	printf '%s [%s] %s\n' "$(date '+%Y-%m-%dT%H:%M:%S%z' 2>/dev/null || printf unknown)" "$level" "$message" >&2
+}
+
+athena_die() {
+	athena_log ERROR "$*"
+	exit 1
+}
+
+athena_redact() {
+	sed -E \
+		-e 's#((vless|vmess|trojan|hysteria2?|tuic|ss)://)[^[:space:]]+#\1REDACTED#gI' \
+		-e 's#((token|password|passwd|private_key|uuid)[[:space:]]*[:=][[:space:]]*)[^[:space:],;]+#\1REDACTED#gI'
+}
+
+athena_lock() {
+	name="$1"
+	lock_root="$(athena_root /var/lock)"
+	mkdir -p "$lock_root"
+	ATHENA_LOCK_PATH="$lock_root/athena-$name.lock"
+	mkdir "$ATHENA_LOCK_PATH" 2>/dev/null
+}
+
+athena_unlock() {
+	if [ -n "$ATHENA_LOCK_PATH" ] && [ -d "$ATHENA_LOCK_PATH" ]; then
+		rmdir "$ATHENA_LOCK_PATH" 2>/dev/null || true
+	fi
+	ATHENA_LOCK_PATH=""
+}
+
+athena_atomic_write() {
+	target="$(athena_root "$1")"
+	parent="$(dirname "$target")"
+	mkdir -p "$parent"
+	tmp="$parent/.athena.$$.tmp"
+	umask 077
+	if ! cat >"$tmp"; then
+		rm -f "$tmp"
+		return 1
+	fi
+	mv -f "$tmp" "$target"
+}
+
+athena_uci_get() {
+	key="$1"
+	default="${2:-}"
+	if command -v uci >/dev/null 2>&1; then
+		value="$(uci -q get "$key" 2>/dev/null || true)"
+	else
+		value=""
+	fi
+	[ -n "$value" ] && printf '%s\n' "$value" || printf '%s\n' "$default"
+}
+
+athena_is_ipv4() {
+	printf '%s\n' "$1" | awk -F. '
+		NF != 4 { bad=1 }
+		{
+			for (i=1; i<=4; i++)
+				if ($i !~ /^[0-9]+$/ || $i < 0 || $i > 255) bad=1
+		}
+		END { exit bad ? 1 : 0 }
+	'
+}
+
+athena_is_mac() {
+	printf '%s\n' "$1" | grep -Eq '^([[:xdigit:]]{2}:){5}[[:xdigit:]]{2}$'
+}
+
+athena_is_hostname() {
+	case "$1" in
+		""|*[^A-Za-z0-9.-]*|.*|*..*|*.) return 1 ;;
+	esac
+	printf '%s\n' "$1" | grep -Eq '^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$'
+}
+
+athena_json_escape() {
+	printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
+}

@@ -1,24 +1,27 @@
 {
-  "project": "Athena AX6600 DAED WOL Final Candidate",
-  "project_version": "v18",
-  "device": "JDCloud RE-CS-02",
+  "name": "Athena AX6600 DAED",
+  "version": "v19.0.0-rc1",
+  "device": "jdcloud_re-cs-02",
   "target": "qualcommax/ipq60xx",
-  "source_repo": "https://github.com/LiBwrt/openwrt-6.x.git",
-  "source_commit": "cf9444c1b20458687898489b36e1aebf56d9baf2",
-  "daede_ref": "v2026.07.09",
-  "build_outputs": [
+  "kernel_series": "6.12",
+  "kernel_slot_limit_bytes": 6291456,
+  "kernel_warning_margin_bytes": 131072,
+  "lan_address": "192.168.50.1",
+  "source_lock": "SOURCES.lock.json",
+  "local_packages": [
+    "athena-runtime",
+    "luci-app-athena"
+  ],
+  "firmware_outputs": [
     "initramfs-uImage.itb",
     "squashfs-sysupgrade.bin"
   ],
-  "features": [
-    "daed",
-    "luci-app-daede",
-    "detached vmlinux-btf",
-    "luci-app-athena-led",
-    "luci-app-wol",
-    "etherwake",
-    "luci-i18n-wol-zh-cn"
-  ],
-  "safety": "Test full-feature initramfs before using the sysupgrade from the same artifact",
-  "wol_scope": "Wake wired LAN computers/NAS; remote access to LuCI still requires a secure VPN or equivalent"
+  "safe_first_boot": {
+    "daed_enabled": false,
+    "athena_led_enabled": false,
+    "iot_wifi_enabled": false,
+    "flow_offload_enabled": false,
+    "daed_listener": "127.0.0.1:2023",
+    "recovery_url": "http://192.168.50.1:8080/"
+  }
 }

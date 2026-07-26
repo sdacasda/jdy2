@@ -1,0 +1,11 @@
+{
+  "luci-app-athena": {
+    "description": "Athena status and safe management",
+    "read": {
+      "ubus": { "athena": [ "status", "health", "templates", "backups" ] }
+    },
+    "write": {
+      "ubus": { "athena": [ "runtime_apply", "rollback" ] }
+    }
+  }
+}

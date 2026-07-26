@@ -1,15 +1,15 @@
-# Test first
+# 刷写
 
-Use U-Boot `/uimage.html` with the initramfs image first. Run `athena-feature-check`. Test the screen manually. Leave DAED disabled until a valid configuration is imported.
+1. 备份 ART/EEPROM、MAC、校准分区和原固件。
+2. 校验 Artifact SHA-256。
+3. 在 U-Boot `/uimage.html` 上传 `athena-v19-initramfs-uImage.itb`。
+4. 访问 `http://192.168.50.1/` 与 `http://192.168.50.1:8080/`，验证 WAN、三路 Wi-Fi、NSS、DAED 默认关闭和 IoT 工具。
+5. 至少完成一次重负载测试，再刷写 sysupgrade。
 
-Only after the full-feature RAM image remains stable, boot back into the installed firmware and flash the sysupgrade image from the same Artifact without keeping settings.
-
-## Wake-on-LAN test
-
-After the full-feature initramfs boots, open LuCI and use `Network → Wake on LAN`, or run:
+从 v18 升级：
 
 ```sh
-etherwake -i br-lan AA:BB:CC:DD:EE:FF
+sysupgrade -n /tmp/athena-v19-squashfs-sysupgrade.bin
 ```
 
-Use the wired network adapter MAC address of the target PC.
+不要保留 v18 的网络与 Web 配置。

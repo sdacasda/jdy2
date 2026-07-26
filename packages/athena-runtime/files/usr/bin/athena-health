@@ -1,0 +1,24 @@
+#!/bin/sh
+ATHENA_LIBDIR="${ATHENA_LIBDIR:-/usr/lib/athena}"
+. "$ATHENA_LIBDIR/common.sh"
+. "$ATHENA_LIBDIR/checks.sh"
+
+mode=concise
+case "${1:-}" in
+	'') ;;
+	--verbose) mode=verbose ;;
+	--json) mode=json ;;
+	*) echo "usage: athena-health [--verbose|--json]" >&2; exit 64 ;;
+esac
+
+athena_run_checks
+if [ "$mode" = json ]; then
+	athena_health_json
+else
+	printf '%s\n' "$ATHENA_HEALTH_RECORDS" | while IFS='|' read -r id severity status summary detail; do
+		[ -n "$id" ] || continue
+		printf '[%s] %-18s %s\n' "$status" "$id" "$summary"
+		[ "$mode" != verbose ] || [ -z "$detail" ] || printf '       %s\n' "$detail"
+	done
+fi
+[ "$ATHENA_HEALTH_FAILS" -eq 0 ] || exit 2

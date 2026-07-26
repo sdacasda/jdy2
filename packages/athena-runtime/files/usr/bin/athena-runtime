@@ -1,0 +1,82 @@
+#!/bin/sh
+set -eu
+
+ATHENA_LIBDIR="${ATHENA_LIBDIR:-/usr/lib/athena}"
+. "$ATHENA_LIBDIR/common.sh"
+
+read_file() {
+	file="$(athena_root "$1")"
+	[ -r "$file" ] && cat "$file" || printf 'unavailable\n'
+}
+
+apply_policy() {
+	wait_seconds="${ATHENA_ECM_WAIT_SECONDS:-30}"
+	elapsed=0
+	while [ "$elapsed" -le "$wait_seconds" ]; do
+		ipv4="$(athena_root /sys/kernel/debug/ecm/front_end_ipv4_stop)"
+		ipv6="$(athena_root /sys/kernel/debug/ecm/front_end_ipv6_stop)"
+		if [ -w "$ipv4" ] && [ -w "$ipv6" ]; then
+			printf '1\n' >"$ipv4"
+			printf '1\n' >"$ipv6"
+			break
+		fi
+		[ "$elapsed" -eq "$wait_seconds" ] && break
+		sleep 1
+		elapsed=$((elapsed + 1))
+	done
+
+	if command -v uci >/dev/null 2>&1; then
+		changed=0
+		[ "$(uci -q get firewall.@defaults[0].flow_offloading 2>/dev/null || true)" = 0 ] || {
+			uci -q set firewall.@defaults[0].flow_offloading=0
+			changed=1
+		}
+		[ "$(uci -q get firewall.@defaults[0].flow_offloading_hw 2>/dev/null || true)" = 0 ] || {
+			uci -q set firewall.@defaults[0].flow_offloading_hw=0
+			changed=1
+		}
+		[ "$changed" -eq 0 ] || uci -q commit firewall
+	fi
+
+	governor="$(athena_uci_get athena.main.cpu_governor performance)"
+	for file in "$(athena_root /sys/devices/system/cpu/cpufreq)"/policy*/scaling_governor; do
+		[ -w "$file" ] && printf '%s\n' "$governor" >"$file"
+	done
+
+	if [ "$ATHENA_ROOT" = "/" ]; then
+		pid="$(pidof daed 2>/dev/null || true)"
+		if [ -n "$pid" ]; then
+			priority="$(athena_uci_get athena.main.daed_priority -5)"
+			renice "$priority" -p "$pid" >/dev/null 2>&1 || true
+			affinity="$(athena_uci_get athena.main.daed_affinity auto)"
+			if [ "$affinity" != auto ] && command -v taskset >/dev/null 2>&1; then
+				taskset -pc "$affinity" "$pid" >/dev/null 2>&1 || true
+			fi
+		fi
+	fi
+}
+
+status_policy() {
+	printf 'ecm_ipv4_stop=%s\n' "$(read_file /sys/kernel/debug/ecm/front_end_ipv4_stop)"
+	printf 'ecm_ipv6_stop=%s\n' "$(read_file /sys/kernel/debug/ecm/front_end_ipv6_stop)"
+	printf 'ecm_ipv4_accelerated=%s\n' "$(read_file /sys/kernel/debug/ecm/ecm_nss_ipv4/accelerated_count)"
+	printf 'ecm_ipv6_accelerated=%s\n' "$(read_file /sys/kernel/debug/ecm/ecm_nss_ipv6/accelerated_count)"
+	printf 'flow_offloading=%s\n' "$(athena_uci_get 'firewall.@defaults[0].flow_offloading' 0)"
+	printf 'flow_offloading_hw=%s\n' "$(athena_uci_get 'firewall.@defaults[0].flow_offloading_hw' 0)"
+	for file in "$(athena_root /sys/devices/system/cpu/cpufreq)"/policy*/scaling_governor; do
+		[ -r "$file" ] || continue
+		printf 'governor_%s=%s\n' "$(basename "$(dirname "$file")")" "$(cat "$file")"
+	done
+	printf 'daed_pid=%s\n' "$(pidof daed 2>/dev/null || printf stopped)"
+}
+
+case "${1:-}" in
+	apply) apply_policy ;;
+	status) status_policy ;;
+	restore-defaults)
+		if command -v uci >/dev/null 2>&1; then
+			uci -q revert firewall
+		fi
+		;;
+	*) echo "usage: athena-runtime {apply|status|restore-defaults}" >&2; exit 64 ;;
+esac

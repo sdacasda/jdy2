@@ -1,0 +1,39 @@
+#!/bin/sh
+. /usr/share/libubox/jshn.sh
+
+case "$1" in
+	list)
+		echo '{"status":{},"health":{},"templates":{},"backups":{},"runtime_apply":{},"rollback":{"id":"String","confirm":"Boolean"}}'
+		;;
+	call)
+		method="$2"
+		case "$method" in
+			status)
+				json_init; json_add_string version "19.0.0-rc1"
+				json_add_string setup_state "$(sed -n 's/^STATE=//p' /var/lib/athena/setup-state 2>/dev/null | tail -n1)"
+				json_add_boolean daed_running "$(pidof daed >/dev/null 2>&1 && echo 1 || echo 0)"
+				json_add_string recovery_url "http://192.168.50.1:8080/"
+				json_add_string iot_status "$(athena-iot status 2>/dev/null | tr '\n' ' ')"
+				json_dump
+				;;
+			health) athena-health --json ;;
+			templates)
+				json_init; json_add_object files
+				for f in global.dae dns.dae routing.dae IMPORT.md; do
+					[ -r "/etc/athena/generated/$f" ] || continue
+					json_add_string "$f" "$(head -c 65536 "/etc/athena/generated/$f")"
+				done
+				json_close_object; json_dump
+				;;
+			backups) json_init; json_add_string ids "$(athena-backup --list 2>/dev/null | head -n 20 | tr '\n' ' ')"; json_dump ;;
+			runtime_apply) athena-runtime apply; echo '{"ok":true}' ;;
+			rollback)
+				json_load "${3:-{}}"; json_get_var id id; json_get_var confirm confirm
+				case "$id" in ''|*[!0-9-]*) echo '{"error":"invalid backup id"}'; exit 1;; esac
+				[ "$confirm" = 1 ] || { echo '{"error":"confirmation required"}'; exit 1; }
+				athena-rollback "$id"; echo '{"ok":true}'
+				;;
+			*) echo '{"error":"unknown method"}'; exit 1 ;;
+		esac
+		;;
+esac

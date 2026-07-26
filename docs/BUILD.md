@@ -1,10 +1,7 @@
-# Build
+# 构建
 
-Pinned LiBwrt commit: `cf9444c1b20458687898489b36e1aebf56d9baf2`.
-DAED release: `v2026.07.09`.
-Target: `qualcommax/ipq60xx`, device `jdcloud_re-cs-02`.
-One workflow run builds both RAM and persistent images.
+运行 GitHub Actions 工作流 `Build Athena AX6600 DAED v19`。建议首次使用 `compile_jobs=2`、`build_profile=stable`、`release_stage=test`。
 
-## Wake-on-LAN
+构建输入来自 `SOURCES.lock.json`，工作流不会自动创建 Release。Artifact 必须同时包含 initramfs 与 sysupgrade。先运行 `tools/verify_checksums.sh` 校验。
 
-The image explicitly selects `luci-app-wol`, `etherwake` and `luci-i18n-wol-zh-cn`. The LuCI application also declares `etherwake` as its package dependency.
+GitHub 云端构建才是完整编译环境；本地静态检查不等于固件已成功编译。

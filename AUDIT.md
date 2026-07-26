@@ -1,9 +1,5 @@
-# Static audit
+# Audit
 
-Validated locally: shell syntax, Python syntax, workflow YAML, source pin, target, detached-BTF wiring, v16 RAM network fallback, QCN9074 firmware conflict prevention, both image collection paths, 6 MiB kernel guard, line endings, merge markers and ZIP integrity.
+v19 构建输入全部锁定至完整提交 SHA。CI 执行单元测试、运行时脚本测试、模板验证、包布局、Web 配置、安全扫描、有效配置检查和固件产物检查。
 
-Real-device full-feature initramfs testing remains mandatory before persistent flashing.
-
-## v18 WOL safeguards
-
-Static checks require `luci-app-wol`, `etherwake` and the Simplified Chinese WOL translation in the effective configuration and runtime diagnostic script.
+安全扫描拒绝公开节点链接、Token、私钥、Wi-Fi 密码等凭据。DAED 数据库和私人配置不进入 Artifact。缺少 initramfs/sysupgrade、内核超过 6 MiB、必需包缺失或禁用包出现都会使构建失败。

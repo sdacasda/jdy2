@@ -1,0 +1,6 @@
+# Steam content and update distribution
+steamcontent.com
+steamserver.net
+steamstatic.com
+steamusercontent.com
+steamcdn-a.akamaihd.net
