@@ -14,6 +14,7 @@
 - 敏感信息扫描
 - v19 固件 seed 配置与禁用包检查
 - Git 工作树清洁性与脚本可执行权限检查
+- Windows/GitHub 上传丢失可执行位的恢复测试
 
 ## 未在本机完成
 
@@ -30,3 +31,7 @@
 - SmartDNS 不内置，DNS 分流由 DAED 单独承担。
 - ECM L3/L4 frontend 与 Flow Offload 停止，但 NSS 数据面及 Wi-Fi offload 保留。
 - IoT SSID 加入现有 LAN，不启用客户端隔离或独立 VLAN，以兼容局域网发现和控制。
+
+## RC1 工作流修订
+
+首次公开构建在 `Validate source project` 阶段暴露出 Windows/GitHub 上传将脚本保存为 `100644` 的平台差异。工作流现在会在测试前恢复执行权限，OpenWrt 包安装阶段也会强制把运行时命令设置为 `0755`。前置校验失败时，Artifact 收集会生成明确诊断文件，不再因缺少 `openwrt` 目录产生第二个无关错误。

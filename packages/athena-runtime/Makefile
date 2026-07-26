@@ -24,6 +24,10 @@ endef
 define Package/athena-runtime/install
 	$(INSTALL_DIR) $(1)/
 	$(CP) ./files/* $(1)/
+	chmod 0755 \
+		$(1)/usr/bin/athena-* \
+		$(1)/etc/init.d/athena-runtime \
+		$(1)/usr/libexec/rpcd/athena
 endef
 
 $(eval $(call BuildPackage,athena-runtime))

@@ -5,3 +5,5 @@
 DAED 上游原计划版本 `v2026.07.09` 已不存在，因此源码锁使用当前可验证的 `v2026.07.26` 提交 `b16dbbd3f94558c30d9a875c7e8daf91d4718747`。
 
 上传整个源码目录到 GitHub 后运行 v19 工作流。先下载 test Artifact、校验、测试 initramfs，再考虑 sysupgrade。真机验证通过后可发布 `v19.0.0-rc1`，稳定后再发布 `v19.0.0`。
+
+工作流已兼容 Windows/GitHub 上传导致的可执行位丢失，并升级到 Node 24 兼容的 `actions/checkout@v5` 与 `actions/upload-artifact@v6`。重新上传修订版时应覆盖整个源码目录。

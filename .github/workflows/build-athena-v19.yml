@@ -30,8 +30,17 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 420
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+      - name: Restore executable permissions
+        run: |
+          chmod +x scripts/*.sh scripts/*.py
+          chmod +x tests/runtime/*.sh
+          chmod +x packages/athena-runtime/files/usr/bin/athena-*
+          chmod +x packages/athena-runtime/files/etc/init.d/athena-runtime
+          chmod +x packages/athena-runtime/files/usr/libexec/rpcd/athena
+          chmod +x packages/luci-app-athena/root/etc/uci-defaults/95-athena-web
       - name: Validate source project
+        id: validate
         run: |
           set -euo pipefail
           python3 -m unittest discover -s tests -p 'test_*.py' -v
@@ -78,8 +87,16 @@ jobs:
         run: python3 scripts/inspect_firmware.py --openwrt openwrt --output inspection --kernel-limit 6291456
       - name: Collect artifact
         if: always()
-        run: bash scripts/collect_output.sh openwrt "Athena-AX6600-v19-${{ github.run_number }}"
-      - uses: actions/upload-artifact@v4
+        run: |
+          OUTPUT="Athena-AX6600-v19-${{ github.run_number }}"
+          if [ -d openwrt/bin/targets/qualcommax/ipq60xx ]; then
+            bash scripts/collect_output.sh openwrt "$OUTPUT"
+          else
+            mkdir -p "$OUTPUT/diagnostics"
+            printf 'Firmware build did not start or did not produce a target directory.\n' \
+              > "$OUTPUT/diagnostics/BUILD_NOT_AVAILABLE.txt"
+          fi
+      - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: Athena-AX6600-v19-${{ github.run_number }}-${{ inputs.release_stage }}
@@ -88,5 +105,9 @@ jobs:
       - name: Enforce build result
         if: always()
         run: |
+          if [ "${{ steps.validate.outcome }}" != success ]; then
+            echo "Source validation already reported the primary failure."
+            exit 0
+          fi
           test "${{ steps.compile.outcome }}" = success
           test "${{ steps.inspect.outcome }}" = success
