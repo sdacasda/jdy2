@@ -50,9 +50,13 @@ class PackageRegistrationDiagnosticsTests(unittest.TestCase):
             )
             (openwrt / "scripts" / "package-metadata.pl").write_text(
                 "#!/usr/bin/perl\n"
-                "print \"config PACKAGE_athena-runtime\\n"
-                "\\ttristate \\\"athena-runtime\\\"\\n"
-                "config PACKAGE_luci-app-athena\\n"
+                "die \"usage: package-metadata.pl config FILE\\n\" "
+                "unless $ARGV[0] eq 'config' && defined $ARGV[1];\n"
+                "open(my $metadata, '<', $ARGV[1]) or die $!;\n"
+                "close($metadata);\n"
+                "print \"\\tconfig PACKAGE_athena-runtime\\n"
+                "\\t\\ttristate \\\"athena-runtime\\\"\\n"
+                "\\tconfig PACKAGE_luci-app-athena\\n"
                 "\\ttristate \\\"luci-app-athena\\\"\\n\";\n",
                 encoding="utf-8",
             )
@@ -92,8 +96,8 @@ class PackageRegistrationDiagnosticsTests(unittest.TestCase):
             recomputed = (output / "recomputed.config-package.in").read_text(
                 encoding="utf-8"
             )
-            self.assertIn("config PACKAGE_athena-runtime", recomputed)
-            self.assertIn("config PACKAGE_luci-app-athena", recomputed)
+            self.assertIn("\tconfig PACKAGE_athena-runtime", recomputed)
+            self.assertIn("\tconfig PACKAGE_luci-app-athena", recomputed)
             summary = (output / "registration-summary.txt").read_text(
                 encoding="utf-8"
             )

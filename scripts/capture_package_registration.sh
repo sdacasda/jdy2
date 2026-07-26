@@ -30,7 +30,7 @@ copy_or_mark_missing \
 if [ -r "$TOPDIR/tmp/.packageinfo" ] &&
 	[ -r "$TOPDIR/scripts/package-metadata.pl" ]; then
 	if ! perl "$TOPDIR/scripts/package-metadata.pl" config \
-		<"$TOPDIR/tmp/.packageinfo" \
+		"$TOPDIR/tmp/.packageinfo" \
 		>"$OUTPUT/recomputed.config-package.in" \
 		2>"$OUTPUT/recompute.stderr"; then
 		printf 'package-metadata.pl failed; see recompute.stderr\n' \
@@ -57,7 +57,7 @@ config_status() {
 
 	if [ ! -r "$file" ]; then
 		printf '%s PACKAGE_%s: file-missing\n' "$label" "$symbol"
-	elif grep -Fqx "config PACKAGE_$symbol" "$file"; then
+	elif grep -Eq "^[[:space:]]*config PACKAGE_$symbol$" "$file"; then
 		printf '%s PACKAGE_%s: present\n' "$label" "$symbol"
 	else
 		printf '%s PACKAGE_%s: missing\n' "$label" "$symbol"

@@ -1,36 +1,44 @@
 # Athena v19.0.0-rc1 变更摘要
 
-## 本次：OpenWrt 包注册诊断
+## 本次：修复 OpenWrt 本地包注册
 
-GitHub Actions 第四次构建的 Artifact 已证明：
+第 5 次 GitHub Actions Artifact 已经提供了完整证据，本次修复两个相互独立的根因。
 
-- `athena-runtime` 已进入 OpenWrt 合并后的 `tmp/.packageinfo`。
-- 源配置已选择 `CONFIG_PACKAGE_athena-runtime=y` 和
-  `CONFIG_PACKAGE_luci-app-athena=y`。
-- `make defconfig` 后两个选项均从有效配置中消失。
-- `athena-runtime` 的直接与传递依赖可以正常生成 Kconfig，
-  没有发现会隐藏该包的依赖条件。
+### 1. `athena-runtime` 被 Kconfig 隐藏
 
-因此，故障已缩小到 OpenWrt 从包元数据生成 Kconfig，以及 Kconfig
-解析源配置的边界。上一份 Artifact 没有保存实际使用的
-`tmp/.config-package.in`，无法再从现有材料判断是哪一侧丢失。
+运行时包原先显式依赖：
 
-本次增加：
+```text
++tar +gzip
+```
 
-- 在 `defconfig` 前显式执行并完成 `prepare-tmpinfo`。
-- 在 `defconfig` 前后分别保存：
-  - 完整 `tmp/.packageinfo`
-  - 实际 `tmp/.config-package.in`
-  - 由同一份 `.packageinfo` 重新计算的 Kconfig
-  - Athena 两个本地包的独立扫描元数据
-  - 当时的 `.config`
-- 生成简短的 `registration-summary.txt`，直接显示两个包在每一层是否存在。
-- 无论构建成功或失败，都把上述文件放入 GitHub Artifact。
-- 新增行为回归测试，验证“实际 Kconfig 与重新计算结果不一致”时证据不会丢失。
+LiBwrt 中 `tar` 包在启用 `CONFIG_PACKAGE_TAR_XZ=y` 时还要求
+`CONFIG_PACKAGE_xz-utils=y`。当前有效配置没有选择 `xz-utils`，因此
+`athena-runtime` 在 `make defconfig` 阶段不可见并被移除。
 
-这是一版有明确目的的诊断构建，不宣称已经通过完整云端固件编译。
-下一次 GitHub Actions 运行会直接确认最终根因；如果显式
-`prepare-tmpinfo` 同时消除了时序问题，构建也会继续进入固件编译。
+Athena 的备份和回滚脚本只使用 OpenWrt BusyBox 已提供的
+`tar -czf`、`tar -xzf`，不需要 GNU tar/gzip 包。本次删除这两个多余依赖，
+保留 `jshn`、`jsonfilter`、`rpcd`、`ucode`、`curl` 和 `ca-bundle`。
+
+### 2. `luci-app-athena` 没有进入包扫描
+
+OpenWrt 的包扫描器先通过源码文本寻找 `BuildPackage` 等签名，再决定是否扫描
+Makefile。LuCI 包缺少标准扫描标记，所以即使 Makefile 可单独输出合法元数据，
+也不会进入合并后的 `tmp/.packageinfo`。
+
+本次加入 LuCI 标准签名：
+
+```make
+# call BuildPackage - OpenWrt buildroot signature
+```
+
+### 3. 加强回归保护与诊断
+
+- 包布局检查现在会拒绝缺少 OpenWrt 扫描签名的 LuCI 包。
+- 包布局检查现在会拒绝运行时包重新引入可选 GNU `tar`/`gzip` 依赖。
+- 包注册诊断使用 OpenWrt `package-metadata.pl config FILE` 的真实调用方式。
+- Kconfig 符号检查允许标准的前导空白，避免诊断报告误报。
+- 新增行为测试，覆盖以上两个根因以及诊断脚本。
 
 ## 保持不变
 
@@ -39,9 +47,15 @@ GitHub Actions 第四次构建的 Artifact 已证明：
 - Argon 默认深色并保留配置能力
 - 不内置 SmartDNS
 - 国内直连、国外代理
-- 国内 UDP DNS、国外代理 DoH、节点 bootstrap 直连
-- Steam 下载、游戏与 BT 选择性直连
-- 保留 NSS 与 Wi-Fi offload，停止 ECM frontend 和 flow offload
+- 国内 UDP DNS、国外经代理 DoH、节点 bootstrap 直连
+- Steam 下载、游戏和 BT 选择性直连
+- 保留 NSS/Wi-Fi offload，停止 ECM frontend 和 flow offload
 - 独立 2.4 GHz IoT SSID
-- `athena-setup`、`athena-health`、`athena-backup`、
+- 提供 `athena-setup`、`athena-health`、`athena-backup`、
   `athena-rollback`、`athena-runtime`
+
+## 重要说明
+
+本次已经在本地完成静态检查、行为测试和完整包元数据反事实验证，但 Windows
+环境不能完成 LiBwrt 的 Linux 固件编译。下一次 GitHub Actions 运行仍是最终
+云端验证；在 initramfs 真机测试通过前，不应刷写 sysupgrade。

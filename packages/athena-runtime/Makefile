@@ -10,7 +10,7 @@ define Package/athena-runtime
   SECTION:=utils
   CATEGORY:=Utilities
   TITLE:=Athena AX6600 safe runtime and recovery tools
-  DEPENDS:=+jshn +jsonfilter +rpcd +ucode +curl +ca-bundle +tar +gzip
+  DEPENDS:=+jshn +jsonfilter +rpcd +ucode +curl +ca-bundle
 endef
 
 define Package/athena-runtime/description
