@@ -73,6 +73,7 @@ def main() -> int:
             "config/athena-v19.config",
             "packages/athena-runtime/Makefile",
             "packages/luci-app-athena/Makefile",
+            "scripts/stage_local_packages.sh",
         ):
             if not (root / relative).is_file():
                 errors.append(f"missing v19 implementation file: {relative}")

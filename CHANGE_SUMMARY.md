@@ -1,5 +1,13 @@
 # v19.0.0-rc1 变更摘要
 
+## fixed3：OpenWrt 本地包注册修复
+
+第三次公开构建确认：种子配置已经选择 `athena-runtime`，但该选项在
+`make defconfig` 后被移除。本版本会在 feeds 建立元数据之前先放入
+`athena-runtime` 与 `luci-app-athena`；该步骤可重复执行并拒绝产生嵌套包目录。
+运行 `defconfig` 前还会清理旧的 OpenWrt 包元数据，强制重新扫描本地包。
+若配置阶段仍失败，诊断 Artifact 会额外包含 Athena 包元数据和包扫描日志。
+
 新增 Athena 运行时包、LuCI 管理应用、Argon/DAED 同源面板、恢复入口、配置模板、独立 IoT 2.4G SSID、备份回滚、健康检查、不可变源码锁和严格产物验证。
 
 DAED 上游原计划版本 `v2026.07.09` 已不存在，因此源码锁使用当前可验证的 `v2026.07.26` 提交 `b16dbbd3f94558c30d9a875c7e8daf91d4718747`。

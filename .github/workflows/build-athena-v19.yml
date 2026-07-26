@@ -62,6 +62,7 @@ jobs:
           git -C openwrt fetch --depth=1 origin "$COMMIT"
           git -C openwrt checkout --detach FETCH_HEAD
           test "$(git -C openwrt rev-parse HEAD)" = "$COMMIT"
+          bash scripts/stage_local_packages.sh openwrt
       - name: Prepare feeds and locked packages
         run: |
           cd openwrt
@@ -70,6 +71,9 @@ jobs:
           cd ..
           bash scripts/prepare_packages.sh openwrt
           bash scripts/inject_runtime.sh openwrt
+          test -f openwrt/package/custom/athena-runtime/Makefile
+          test -f openwrt/package/custom/luci-app-athena/Makefile
+          rm -rf openwrt/tmp
       - name: Generate effective OpenWrt config
         id: defconfig
         run: |
@@ -103,6 +107,11 @@ jobs:
             cp config/athena-v19.config "$OUTPUT/diagnostics/seed.config"
             cp openwrt/.config "$OUTPUT/diagnostics/effective.config" 2>/dev/null || true
             openwrt/scripts/diffconfig.sh > "$OUTPUT/diagnostics/diffconfig" 2>/dev/null || true
+            grep -A30 -B5 '^Package: athena-runtime$' openwrt/tmp/.packageinfo \
+              > "$OUTPUT/diagnostics/athena-runtime-packageinfo.txt" 2>/dev/null || true
+            if [ -d openwrt/logs/package/custom ]; then
+              cp -a openwrt/logs/package/custom "$OUTPUT/diagnostics/package-scan-logs"
+            fi
           fi
       - uses: actions/upload-artifact@v6
         if: always()

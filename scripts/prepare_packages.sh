@@ -55,6 +55,10 @@ if ! grep -RqsE 'define Package/(v2ray-geoip|v2ray-geosite)' "$TOPDIR/feeds/pack
 	cp -a "$(dirname "$geodata_makefile")" "$CUSTOM/v2ray-geodata"
 fi
 
-cp -a "$PROJECT_ROOT/packages/athena-runtime" "$CUSTOM/athena-runtime"
-cp -a "$PROJECT_ROOT/packages/luci-app-athena" "$CUSTOM/luci-app-athena"
+for package in athena-runtime luci-app-athena; do
+	[ -f "$CUSTOM/$package/Makefile" ] || {
+		echo "local package was not staged before feeds: $package" >&2
+		exit 1
+	}
+done
 echo "PASS: all v19 packages imported from immutable commits"
