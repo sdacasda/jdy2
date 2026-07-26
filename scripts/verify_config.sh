@@ -13,12 +13,16 @@ for token in \
  CONFIG_PACKAGE_luci-app-athena=y \
  CONFIG_PACKAGE_luci-theme-argon=y \
  CONFIG_PACKAGE_luci-app-argon-config=y \
- CONFIG_PACKAGE_nginx=y \
  CONFIG_PACKAGE_uhttpd=y \
  CONFIG_PACKAGE_ath11k-firmware-qcn9074=y
 do
 	grep -Fxq "$token" "$CONFIG" || { echo "FAIL missing:$token" >&2; exit 1; }
 done
+if ! grep -Eq '^CONFIG_PACKAGE_nginx(-ssl)?=y$' "$CONFIG"; then
+	echo "FAIL missing:CONFIG_PACKAGE_nginx-ssl=y (or nginx=y)" >&2
+	grep -E '^CONFIG_PACKAGE_(nginx|luci.*nginx|uhttpd)' "$CONFIG" >&2 || true
+	exit 1
+fi
 for forbidden in smartdns luci-app-smartdns luci-app-openclash luci-app-passwall luci-app-homeproxy ath11k-firmware-qcn9074-ddwrt; do
 	! grep -Fxq "CONFIG_PACKAGE_${forbidden}=y" "$CONFIG" || { echo "FAIL forbidden:$forbidden" >&2; exit 1; }
 done

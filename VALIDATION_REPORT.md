@@ -35,3 +35,5 @@
 ## RC1 工作流修订
 
 首次公开构建在 `Validate source project` 阶段暴露出 Windows/GitHub 上传将脚本保存为 `100644` 的平台差异。工作流现在会在测试前恢复执行权限，OpenWrt 包安装阶段也会强制把运行时命令设置为 `0755`。前置校验失败时，Artifact 收集会生成明确诊断文件，不再因缺少 `openwrt` 目录产生第二个无关错误。
+
+第二次公开构建到达 OpenWrt 配置阶段，暴露出 Nginx 包变体核验问题：`luci-ssl-nginx` 使用 `nginx-ssl`，而旧校验只接受基础 `nginx`。seed 已移除互斥的基础变体，核验改为接受实际的 SSL 变体；工作流也将 defconfig 与有效配置核验拆开，并在诊断 Artifact 中保留 seed、effective config 和 diffconfig。

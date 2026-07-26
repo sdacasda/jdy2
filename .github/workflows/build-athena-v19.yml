@@ -70,10 +70,15 @@ jobs:
           cd ..
           bash scripts/prepare_packages.sh openwrt
           bash scripts/inject_runtime.sh openwrt
-      - name: Configure
+      - name: Generate effective OpenWrt config
+        id: defconfig
         run: |
           cp config/athena-v19.config openwrt/.config
           make -C openwrt defconfig
+          cp openwrt/.config effective.config
+      - name: Verify effective OpenWrt config
+        id: configcheck
+        run: |
           bash scripts/verify_config.sh openwrt/.config openwrt/package/custom/daed/Makefile
       - name: Build both images
         id: compile
@@ -95,6 +100,9 @@ jobs:
             mkdir -p "$OUTPUT/diagnostics"
             printf 'Firmware build did not start or did not produce a target directory.\n' \
               > "$OUTPUT/diagnostics/BUILD_NOT_AVAILABLE.txt"
+            cp config/athena-v19.config "$OUTPUT/diagnostics/seed.config"
+            cp openwrt/.config "$OUTPUT/diagnostics/effective.config" 2>/dev/null || true
+            openwrt/scripts/diffconfig.sh > "$OUTPUT/diagnostics/diffconfig" 2>/dev/null || true
           fi
       - uses: actions/upload-artifact@v6
         if: always()
@@ -107,6 +115,10 @@ jobs:
         run: |
           if [ "${{ steps.validate.outcome }}" != success ]; then
             echo "Source validation already reported the primary failure."
+            exit 0
+          fi
+          if [ "${{ steps.defconfig.outcome }}" != success ] || [ "${{ steps.configcheck.outcome }}" != success ]; then
+            echo "OpenWrt configuration already reported the primary failure. Download the diagnostic Artifact."
             exit 0
           fi
           test "${{ steps.compile.outcome }}" = success
