@@ -102,7 +102,8 @@ jobs:
         run: |
           OUTPUT="Athena-AX6600-v19-${{ github.run_number }}"
           if [ -d openwrt/bin/targets/qualcommax/ipq60xx ]; then
-            bash scripts/collect_output.sh openwrt "$OUTPUT"
+            bash scripts/collect_output.sh \
+              openwrt "$OUTPUT" inspection/firmware-inspection.json
           else
             mkdir -p "$OUTPUT/diagnostics"
             printf 'Firmware build did not start or did not produce a target directory.\n' \

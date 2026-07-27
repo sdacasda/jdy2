@@ -4,6 +4,22 @@
 
 ## 输入证据
 
+### 第 6 次 GitHub Actions
+
+用户提供的完整步骤截图确认：
+
+- 有效 OpenWrt 配置生成成功。
+- 有效配置验证成功。
+- 两个固件镜像的编译步骤成功，耗时约 3 小时 47 分钟。
+- 固件检查步骤成功。
+- 产物收集步骤报告 `Expected one initramfs, found 0`。
+- 上传步骤因 `Athena-AX6600-v19-6` 中没有文件而跳过。
+
+这证明包注册和固件编译问题已经越过。失败边界位于检查器向收集器传递已验证
+镜像路径的过程，而不是 LiBwrt 编译过程。
+
+### 第 5 次 GitHub Actions
+
 检查了用户提供的 `Athena-AX6600-v19-5-test.zip`：
 
 - SHA-256：
@@ -35,6 +51,16 @@
 
 ## 测试驱动验证
 
+针对第 6 次失败，先加入两个真实脚本行为测试并确认修复前失败：
+
+- 检查报告给出两个有效镜像时，旧收集器仍重新按文件名搜索并报告 0。
+- 收集失败后，旧收集器没有留下检查报告或错误文件。
+
+修复后两个测试均通过。测试没有伪造 `find` 输出，而是直接运行真实
+`collect_output.sh`，验证最终文件和失败副作用。
+
+此前的包注册修复也遵循同样的失败—修复—通过流程：
+
 修复前先加入回归测试并确认它们因以下原因失败：
 
 - LuCI 包缺少 OpenWrt 扫描签名。
@@ -45,7 +71,7 @@
 
 ## 已通过
 
-- Python 测试：24/24
+- Python 测试：26/26
 - OpenWrt 运行时 Shell 测试：7/7
 - 所有项目 Shell 脚本与运行时命令静态语法检查
 - 项目结构与不可变源码锁验证
@@ -54,6 +80,8 @@
 - Nginx、LuCI、DAED 反向代理与恢复入口配置验证
 - 敏感信息扫描
 - 完整包元数据反事实 Kconfig 验证
+- 检查报告到 Artifact 的镜像路径交接测试
+- 收集失败的诊断保留测试
 - `git diff --check`
 
 ## 尚未完成
@@ -61,8 +89,8 @@
 - Windows 本机不具备 OpenWrt 要求的区分大小写 Linux 文件系统和完整 Ubuntu
   构建环境，因此未执行完整 LiBwrt 固件编译。
 - 尚未生成或真机测试新的 initramfs/sysupgrade 镜像。
-- GitHub Actions 下一次运行必须确认两个包在 `make defconfig` 后仍为 `y`，
-  并继续进入固件编译。
+- 第 6 次 GitHub Actions 已完成固件编译，但尚未验证修复后的 Artifact
+  收集流程。
 
 ## 下一次 GitHub Actions 验收
 
@@ -74,9 +102,10 @@ Runtime profile: stable
 Artifact stage: test
 ```
 
-预期 `Verify effective OpenWrt config` 通过，并继续执行
-`Build both images`。如果仍失败，请下载该次 Artifact；新的包注册诊断会保留
-扫描、Kconfig 和有效配置的完整证据。
+预期配置、编译和检查继续通过，随后 `Collect artifact` 应复用
+`inspection/firmware-inspection.json` 中的两个镜像路径并上传 Artifact。
+若仍失败，新的输出目录也会包含检查报告和
+`ARTIFACT_COLLECTION_ERROR.txt`，不会再出现零证据失败。
 
 即使云端编译成功，也必须先从 U-Boot 测试 initramfs。只有基础网络、2.4 GHz
 IoT SSID、三路无线、Argon、DAED 面板及恢复入口验证通过后，才考虑刷写

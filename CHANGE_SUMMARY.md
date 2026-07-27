@@ -1,6 +1,41 @@
 # Athena v19.0.0-rc1 变更摘要
 
-## 本次：修复 OpenWrt 本地包注册
+## 本次：修复成功编译后的产物收集
+
+第 6 次 GitHub Actions 已经通过：
+
+```text
+Generate effective OpenWrt config
+Verify effective OpenWrt config
+Build both images
+Inspect firmware
+```
+
+完整编译耗时约 3 小时 47 分钟。失败只发生在 `Collect artifact`：
+
+```text
+Expected one initramfs, found 0
+```
+
+`Inspect firmware` 已经以相同设备规则验证了唯一的 initramfs 与 sysupgrade，
+但旧收集器没有复用检查结果，而是通过 Bash `find -type f` 再独立发现一次镜像。
+两套发现逻辑产生分歧后，收集器退出；因为输出目录当时只有空目录，
+`upload-artifact` 最终也没有任何文件可以上传。
+
+本次调整：
+
+- `firmware-inspection.json` 成为检查和收集之间的唯一镜像路径数据源。
+- 收集器直接复制检查阶段已经验证的 initramfs 与 sysupgrade。
+- 仅在没有检查报告时使用 `find -L` 作为手动运行的兼容回退。
+- 严格校验报告中的路径仍然存在且可读取。
+- 在严格校验之前保存检查报告。
+- 收集失败时写入 `ARTIFACT_COLLECTION_ERROR.txt`，确保 GitHub 始终能上传证据。
+- 成功收集时同时保存 `build.log`、检查报告与内核尺寸报告。
+- 新增两个行为回归测试：
+  - 收集器复用检查器验证的非默认镜像路径。
+  - 收集失败仍保留可上传的诊断证据。
+
+## 前一项：修复 OpenWrt 本地包注册
 
 第 5 次 GitHub Actions Artifact 已经提供了完整证据，本次修复两个相互独立的根因。
 
