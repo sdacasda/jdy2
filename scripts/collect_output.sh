@@ -88,10 +88,16 @@ fi
 
 cp "${initramfs[0]}" "$OUTPUT/firmware/athena-v19-initramfs-uImage.itb"
 cp "${sysupgrade[0]}" "$OUTPUT/firmware/athena-v19-squashfs-sysupgrade.bin"
-for f in profiles.json *manifest sha256sums; do
+for f in profiles.json *manifest; do
 	found="$(find "$TARGET" -maxdepth 1 -type f -name "$f" -print -quit 2>/dev/null || true)"
 	[ -z "$found" ] || cp "$found" "$OUTPUT/firmware/"
 done
+upstream_sums="$(
+	find "$TARGET" -maxdepth 1 -type f -name sha256sums -print -quit \
+		2>/dev/null || true
+)"
+[ -z "$upstream_sums" ] ||
+	cp "$upstream_sums" "$OUTPUT/firmware/UPSTREAM_SHA256SUMS"
 cp "$PROJECT_ROOT/scripts/verify_after_flash.sh" "$PROJECT_ROOT/scripts/verify_checksums.sh" "$OUTPUT/tools/"
 for f in FLASH.md SETUP.md RECOVERY.md IOT_WIFI.md; do [ ! -f "$PROJECT_ROOT/docs/$f" ] || cp "$PROJECT_ROOT/docs/$f" "$OUTPUT/docs/"; done
 printf 'version=19.0.0-rc1\nbuild_time_utc=%s\n' "$(date -u +%FT%TZ)" >"$OUTPUT/metadata/BUILD_INFO.txt"

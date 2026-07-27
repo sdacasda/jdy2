@@ -74,6 +74,10 @@ class ArtifactTests(unittest.TestCase):
    sysupgrade=target/"validated-sysupgrade.bin"
    initramfs.write_bytes(b"initramfs")
    sysupgrade.write_bytes(b"sysupgrade")
+   (target/"sha256sums").write_text(
+    "upstream checksum evidence\n",
+    encoding="utf-8",
+   )
    inspection=root/"firmware-inspection.json"
    inspection.write_text(
     json.dumps({
@@ -101,6 +105,18 @@ class ArtifactTests(unittest.TestCase):
    self.assertEqual(
     (output/"firmware/athena-v19-squashfs-sysupgrade.bin").read_bytes(),
     b"sysupgrade",
+   )
+   self.assertEqual(
+    (output/"firmware/UPSTREAM_SHA256SUMS").read_text(encoding="utf-8"),
+    "upstream checksum evidence\n",
+   )
+   firmware_names=[
+    path.name for path in (output/"firmware").iterdir() if path.is_file()
+   ]
+   self.assertEqual(
+    len(firmware_names),
+    len({name.casefold() for name in firmware_names}),
+    "Artifact contains filenames that collide on Windows",
    )
 
  def test_failed_collection_still_preserves_inspection_evidence(self):
