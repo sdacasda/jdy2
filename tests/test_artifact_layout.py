@@ -22,10 +22,10 @@ def shell_path(path):
  return subprocess.check_output([cygpath,"-u",str(path)],text=True).strip()
 
 
-def run_collect(topdir,output,inspection):
+def run_collect(topdir,output,inspection,build_log):
  script=shell_path(ROOT/"scripts/collect_output.sh")
  arguments=" ".join(
-  f"'{shell_path(path)}'" for path in (topdir,output,inspection)
+  f"'{shell_path(path)}'" for path in (topdir,output,inspection,build_log)
  )
  if os.name == "nt":
   bash=shutil.which("bash") or r"D:\Git\bin\bash.exe"
@@ -39,7 +39,11 @@ def run_collect(topdir,output,inspection):
    ),
   ]
  else:
-  command=["bash",str(ROOT/"scripts/collect_output.sh"),*map(str,(topdir,output,inspection))]
+  command=[
+   "bash",
+   str(ROOT/"scripts/collect_output.sh"),
+   *map(str,(topdir,output,inspection,build_log)),
+  ]
  environment=os.environ.copy()
  environment["ATHENA_PYTHON"]=sys.executable
  return subprocess.run(
@@ -84,8 +88,10 @@ class ArtifactTests(unittest.TestCase):
     encoding="utf-8",
    )
    output=root/"artifact"
+   build_log=root/"build.log"
+   build_log.write_text("build succeeded\n",encoding="utf-8")
 
-   result=run_collect(topdir,output,inspection)
+   result=run_collect(topdir,output,inspection,build_log)
 
    self.assertEqual(result.returncode,0,result.stderr)
    self.assertEqual(
@@ -108,8 +114,14 @@ class ArtifactTests(unittest.TestCase):
     encoding="utf-8",
    )
    output=root/"artifact"
+   build_log=root/"build.log"
+   build_log.write_text(
+    "bash: line 1: pahole: command not found\n"
+    "ERROR: package/custom/vmlinux-btf failed to build.\n",
+    encoding="utf-8",
+   )
 
-   result=run_collect(topdir,output,inspection)
+   result=run_collect(topdir,output,inspection,build_log)
 
    self.assertNotEqual(result.returncode,0)
    self.assertTrue(
@@ -117,5 +129,21 @@ class ArtifactTests(unittest.TestCase):
    )
    self.assertTrue(
     (output/"diagnostics/ARTIFACT_COLLECTION_ERROR.txt").is_file()
+   )
+   self.assertTrue(
+    (output/"diagnostics/build.log").is_file()
+   )
+   self.assertEqual(
+    (output/"diagnostics/build.log").read_text(encoding="utf-8"),
+    "bash: line 1: pahole: command not found\n"
+    "ERROR: package/custom/vmlinux-btf failed to build.\n",
+   )
+   summary=(output/"diagnostics/build-error-summary.txt").read_text(
+    encoding="utf-8"
+   )
+   self.assertIn("pahole: command not found",summary)
+   self.assertIn("vmlinux-btf failed to build",summary)
+   self.assertTrue(
+    (output/"diagnostics/target-files.txt").is_file()
    )
 if __name__=="__main__": unittest.main()

@@ -3,6 +3,7 @@ set -euo pipefail
 TOPDIR="${1:?usage: collect_output.sh OPENWRT_ROOT OUTPUT_ROOT}"
 OUTPUT="${2:?usage: collect_output.sh OPENWRT_ROOT OUTPUT_ROOT}"
 INSPECTION="${3:-}"
+BUILD_LOG="${4:-}"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET="$TOPDIR/bin/targets/qualcommax/ipq60xx"
 mkdir -p "$OUTPUT"/{firmware,metadata,diagnostics,tools,docs}
@@ -12,6 +13,37 @@ fail_collection() {
 	printf '%s\n' "$1" >&2
 	exit 1
 }
+
+if [ -n "$BUILD_LOG" ] && [ -f "$BUILD_LOG" ]; then
+	cp "$BUILD_LOG" "$OUTPUT/diagnostics/build.log"
+elif [ -f "$PROJECT_ROOT/build.log" ]; then
+	cp "$PROJECT_ROOT/build.log" "$OUTPUT/diagnostics/build.log"
+fi
+
+if [ -f "$OUTPUT/diagnostics/build.log" ]; then
+	grep -Ei \
+		'command not found|fatal error:|(^|[^[:alpha:]])error:|undefined reference|no rule to make target|ERROR: package/.+ failed to build|make(\[[0-9]+\])?: \*\*\*' \
+		"$OUTPUT/diagnostics/build.log" |
+		tail -n 200 >"$OUTPUT/diagnostics/build-error-summary.txt" || true
+fi
+
+if [ -d "$TARGET" ]; then
+	(
+		find -L "$TARGET" -maxdepth 2 \
+			-printf '%y %s %p -> %l\n' 2>&1 || true
+	) | sort >"$OUTPUT/diagnostics/target-files.txt"
+else
+	printf 'Target directory is unavailable: %s\n' "$TARGET" \
+		>"$OUTPUT/diagnostics/target-files.txt"
+fi
+
+[ ! -d "$PROJECT_ROOT/package-registration" ] ||
+	cp -a "$PROJECT_ROOT/package-registration" "$OUTPUT/diagnostics/"
+
+cp "$PROJECT_ROOT/SOURCES.lock.json" "$PROJECT_ROOT/PROJECT.json" \
+	"$OUTPUT/metadata/"
+cp "$TOPDIR/.config" "$OUTPUT/metadata/effective.config" 2>/dev/null || true
+"$TOPDIR/scripts/diffconfig.sh" >"$OUTPUT/metadata/diffconfig" 2>/dev/null || true
 
 read_inspection_paths() {
 	local key="$1"
@@ -30,6 +62,8 @@ PY
 
 if [ -n "$INSPECTION" ] && [ -f "$INSPECTION" ]; then
 	cp "$INSPECTION" "$OUTPUT/diagnostics/firmware-inspection.json"
+	[ ! -f "$(dirname "$INSPECTION")/kernel-size.txt" ] ||
+		cp "$(dirname "$INSPECTION")/kernel-size.txt" "$OUTPUT/diagnostics/"
 	mapfile -t initramfs < <(read_inspection_paths initramfs | tr -d '\r')
 	mapfile -t sysupgrade < <(read_inspection_paths sysupgrade | tr -d '\r')
 else
@@ -58,15 +92,6 @@ for f in profiles.json *manifest sha256sums; do
 	found="$(find "$TARGET" -maxdepth 1 -type f -name "$f" -print -quit 2>/dev/null || true)"
 	[ -z "$found" ] || cp "$found" "$OUTPUT/firmware/"
 done
-cp "$PROJECT_ROOT/SOURCES.lock.json" "$PROJECT_ROOT/PROJECT.json" "$OUTPUT/metadata/"
-cp "$TOPDIR/.config" "$OUTPUT/metadata/effective.config" 2>/dev/null || true
-"$TOPDIR/scripts/diffconfig.sh" >"$OUTPUT/metadata/diffconfig" 2>/dev/null || true
-[ ! -d "$PROJECT_ROOT/package-registration" ] ||
-	cp -a "$PROJECT_ROOT/package-registration" "$OUTPUT/diagnostics/"
-[ ! -f "$PROJECT_ROOT/build.log" ] ||
-	cp "$PROJECT_ROOT/build.log" "$OUTPUT/diagnostics/"
-[ ! -f "$PROJECT_ROOT/inspection/kernel-size.txt" ] ||
-	cp "$PROJECT_ROOT/inspection/kernel-size.txt" "$OUTPUT/diagnostics/"
 cp "$PROJECT_ROOT/scripts/verify_after_flash.sh" "$PROJECT_ROOT/scripts/verify_checksums.sh" "$OUTPUT/tools/"
 for f in FLASH.md SETUP.md RECOVERY.md IOT_WIFI.md; do [ ! -f "$PROJECT_ROOT/docs/$f" ] || cp "$PROJECT_ROOT/docs/$f" "$OUTPUT/docs/"; done
 printf 'version=19.0.0-rc1\nbuild_time_utc=%s\n' "$(date -u +%FT%TZ)" >"$OUTPUT/metadata/BUILD_INFO.txt"
