@@ -116,4 +116,82 @@ class BuildScriptTests(unittest.TestCase):
     text=True,capture_output=True,check=False,
    )
    self.assertEqual(good.returncode,0,good.stdout+good.stderr)
+
+ def test_daed_patch_selects_the_openwrt_bpf_toolchain(self):
+  with tempfile.TemporaryDirectory() as directory:
+   makefile=Path(directory)/"Makefile"
+   makefile.write_text(
+    """include $(TOPDIR)/rules.mk
+PKG_BUILD_DEPENDS:=golang/host bpf-headers
+include $(INCLUDE_DIR)/package.mk
+include $(INCLUDE_DIR)/bpf.mk
+define Package/daed
+  DEPENDS:=+ca-bundle +kmod-sched-bpf \\
+    +DAED_USE_VMLINUX_BTF:vmlinux-btf
+endef
+define Package/daed/config
+\tchoice
+\t\tprompt "BTF source for CO-RE"
+\tconfig DAED_USE_KERNEL_BTF
+\t\tbool "Use kernel BTF"
+\tconfig DAED_USE_VMLINUX_BTF
+\t\tbool "Use vmlinux-btf package"
+\tendchoice
+endef
+""",
+    encoding="utf-8",
+   )
+   result=subprocess.run(
+    [sys.executable,str(ROOT/"scripts/patch_daed_btf.py"),str(makefile)],
+    text=True,capture_output=True,check=False,
+   )
+   self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+   patched=makefile.read_text(encoding="utf-8")
+   self.assertIn("$(BPF_DEPENDS)",patched)
+   self.assertIn("+vmlinux-btf",patched)
+   self.assertNotIn("DAED_USE_VMLINUX_BTF",patched)
+
+ def test_config_verifier_rejects_an_unresolved_bpf_toolchain(self):
+  required=(
+   "CONFIG_TARGET_qualcommax=y",
+   "CONFIG_TARGET_qualcommax_ipq60xx=y",
+   "CONFIG_TARGET_qualcommax_ipq60xx_DEVICE_jdcloud_re-cs-02=y",
+   "CONFIG_TARGET_ROOTFS_INITRAMFS=y",
+   "CONFIG_TARGET_ROOTFS_SQUASHFS=y",
+   "CONFIG_PACKAGE_daed=y",
+   "CONFIG_PACKAGE_luci-app-daede=y",
+   "CONFIG_PACKAGE_athena-runtime=y",
+   "CONFIG_PACKAGE_luci-app-athena=y",
+   "CONFIG_PACKAGE_luci-theme-argon=y",
+   "CONFIG_PACKAGE_luci-app-argon-config=y",
+   "CONFIG_PACKAGE_uhttpd=y",
+   "CONFIG_PACKAGE_ath11k-firmware-qcn9074=y",
+   "CONFIG_PACKAGE_nginx-ssl=y",
+  )
+  with tempfile.TemporaryDirectory() as directory:
+   config=Path(directory)/".config"
+   config.write_text("\n".join(required)+"\n",encoding="utf-8")
+   script=str(ROOT/"scripts/verify_config.sh")
+   argument=str(config)
+   if os.name=="nt":
+    cygpath=shutil.which("cygpath") or r"D:\Git\usr\bin\cygpath.exe"
+    bash=shutil.which("bash") or r"D:\Git\bin\bash.exe"
+    script=subprocess.check_output([cygpath,"-u",script],text=True).strip()
+    argument=subprocess.check_output([cygpath,"-u",argument],text=True).strip()
+    command=[bash,"-lc",f"'{script}' '{argument}'"]
+   else:
+    command=["bash",script,argument]
+   missing=subprocess.run(
+    command,cwd=ROOT,text=True,capture_output=True,check=False,
+   )
+   self.assertNotEqual(missing.returncode,0)
+   self.assertIn("BPF toolchain",missing.stderr)
+   config.write_text(
+    "\n".join(required+("CONFIG_USE_LLVM_HOST=y",))+"\n",
+    encoding="utf-8",
+   )
+   resolved=subprocess.run(
+    command,cwd=ROOT,text=True,capture_output=True,check=False,
+   )
+   self.assertEqual(resolved.returncode,0,resolved.stdout+resolved.stderr)
 if __name__=="__main__": unittest.main()

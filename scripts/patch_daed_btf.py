@@ -28,11 +28,40 @@ def patch_makefile(path: Path) -> None:
             "unable to remove the DAED BTF choice block; upstream layout changed"
         )
 
+    package_block = re.compile(
+        r"(\ndefine Package/daed\n)(.*?)(\nendef\n)",
+        flags=re.DOTALL,
+    )
+    match = package_block.search(text)
+    if match is None:
+        raise RuntimeError("unable to find the DAED package block")
+
+    package_body = match.group(2)
+    if "$(BPF_DEPENDS)" not in package_body:
+        package_body, changed = re.subn(
+            r"^(\s*DEPENDS:=)",
+            r"\1$(BPF_DEPENDS) ",
+            package_body,
+            count=1,
+            flags=re.MULTILINE,
+        )
+        if changed != 1:
+            raise RuntimeError("unable to add the DAED BPF toolchain dependency")
+        text = (
+            text[: match.start()]
+            + match.group(1)
+            + package_body
+            + match.group(3)
+            + text[match.end() :]
+        )
+
     if "DAED_USE_KERNEL_BTF" in text or "DAED_USE_VMLINUX_BTF" in text:
         raise RuntimeError("DAED BTF choice symbols remain after patching")
 
     if "+vmlinux-btf" not in text:
         raise RuntimeError("unconditional vmlinux-btf dependency is missing")
+    if "$(BPF_DEPENDS)" not in text:
+        raise RuntimeError("DAED BPF toolchain dependency is missing")
 
     path.write_text(text, encoding="utf-8", newline="\n")
 

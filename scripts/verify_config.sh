@@ -23,6 +23,11 @@ if ! grep -Eq '^CONFIG_PACKAGE_nginx(-ssl)?=y$' "$CONFIG"; then
 	grep -E '^CONFIG_PACKAGE_(nginx|luci.*nginx|uhttpd)' "$CONFIG" >&2 || true
 	exit 1
 fi
+if ! grep -Eq '^CONFIG_USE_LLVM_(HOST|PREBUILT|BUILD)=y$' "$CONFIG"; then
+	echo "FAIL unresolved BPF toolchain: no usable LLVM backend selected" >&2
+	grep -E '^CONFIG_(BPF_TOOLCHAIN|USE_LLVM|HAS_BPF|NEED_BPF)' "$CONFIG" >&2 || true
+	exit 1
+fi
 for forbidden in smartdns luci-app-smartdns luci-app-openclash luci-app-passwall luci-app-homeproxy ath11k-firmware-qcn9074-ddwrt; do
 	! grep -Fxq "CONFIG_PACKAGE_${forbidden}=y" "$CONFIG" || { echo "FAIL forbidden:$forbidden" >&2; exit 1; }
 done

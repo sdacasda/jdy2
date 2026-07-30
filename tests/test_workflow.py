@@ -14,6 +14,12 @@ class WorkflowTests(unittest.TestCase):
   self.assertRegex(t, r"apt-get install[^\n]*\bpahole\b")
   self.assertIn("command -v pahole", t)
 
+ def test_complete_host_bpf_toolchain_is_installed_and_verified(self):
+  t=(ROOT/".github/workflows/build-athena-v19.yml").read_text(encoding="utf-8")
+  self.assertRegex(t, r"apt-get install[^\n]*\bclang\b[^\n]*\bllvm\b")
+  for tool in ("clang","llc","llvm-dis","opt","llvm-strip"):
+   self.assertIn(f"command -v {tool}",t)
+
  def test_artifact_upload_preserves_hidden_files_listed_in_checksums(self):
   t=(ROOT/".github/workflows/build-athena-v19.yml").read_text(encoding="utf-8")
   self.assertRegex(
