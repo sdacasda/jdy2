@@ -1,5 +1,11 @@
 # Athena AX6600 DAED v19.0.0-rc1
 
+## v19 现代化状态首页
+
+登录 LuCI 后，“状态 → 概况”会显示 Athena 只读实时仪表盘：本机每 3 秒采样一次 WAN、CPU、内存、温度、三路 Wi-Fi、IoT、DAED、NSS、ECM 和 Flow Offload 状态，并用本地 SVG 曲线展示最近约 10 分钟的数据。页面不写配置、不保存浏览器历史，也不加载外部图表资源。
+
+使用方法、告警含义、隐私边界和恢复原概况页的步骤见 [docs/DASHBOARD.md](docs/DASHBOARD.md)。
+
 京东云雅典娜 RE-CS-02 的稳定优先固件构建项目。一次 GitHub Actions 构建同时产生 initramfs 测试镜像和 sysupgrade 镜像。
 
 ## 安全默认值
@@ -26,6 +32,15 @@ Steam 商店/登录可代理，下载 CDN 可直连；指定游戏设备 UDP、M
 3. 下载 Artifact 并校验 SHA-256。
 4. **先用 U-Boot 启动 `athena-v19-initramfs-uImage.itb`。**
 5. 真机验证通过后，才可刷写 `athena-v19-squashfs-sysupgrade.bin`。
+
+CI 会在编译前后校验 DAED 来源。成功构建必须显示：
+
+```text
+PASS: immutable DAED 2026.07.26-r1 is registered and selected
+```
+
+若 Artifact 中的 DAED 是 `1.27.0-r1`，请勿刷写；该 Feed 版本在当前
+LiBwrt 6.12 内核上会因 `local_tcp_sockops` eBPF helper 不兼容而退出。
 
 从 v18 迁移必须不保留旧配置：
 

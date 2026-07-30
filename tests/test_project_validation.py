@@ -56,6 +56,10 @@ class ProjectValidationTests(unittest.TestCase):
         result = run("scripts/verify_project.py", ROOT, "--allow-incomplete")
         self.assertEqual(result.returncode, 0, result.stdout)
 
+    def test_daed_lock_declares_expected_package_version(self) -> None:
+        lock = json.loads((ROOT / "SOURCES.lock.json").read_text(encoding="utf-8"))
+        self.assertEqual(lock["daede"].get("package_version"), "2026.07.26-r1")
+
     def test_current_repository_has_no_secrets(self) -> None:
         result = run("scripts/security_check.py", ROOT)
         self.assertEqual(result.returncode, 0, result.stdout)

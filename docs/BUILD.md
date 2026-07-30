@@ -30,6 +30,10 @@ diagnostics/kernel-size.txt
 diagnostics/step-outcomes.txt
 ```
 
+工作流为 `actions/upload-artifact` 启用了 `include-hidden-files: true`，因为
+包注册诊断目录包含以 `.` 开头的文件，且这些文件已列入根目录
+`SHA256SUMS.txt`。关闭该选项会导致下载后的总校验清单出现缺失文件。
+
 失败时再查看：
 
 ```text

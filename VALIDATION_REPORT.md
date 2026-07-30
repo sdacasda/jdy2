@@ -1,6 +1,96 @@
 # Athena v19.0.0-rc1 验证报告
 
+## 仪表盘变更验证范围
+
+### 本地自动化
+
+本次源码变更要求以下项目在打包前全部通过：
+
+- Python 单元与行为测试；
+- Node.js 图表采样数学测试；
+- OpenWrt 运行时 Shell 测试；
+- 项目、模板、包布局、Web 配置和敏感信息检查；
+- Shell 语法检查；
+- 重新解压源码 ZIP 后重复执行核心验证。
+
+2026-07-30 的工作树验证结果：
+
+```text
+Python 单元/行为测试：45/45 通过
+Node.js 图表数学测试：通过
+运行时 Shell 测试：8/8 通过
+Shell 语法：27 个文件通过
+项目、模板、包布局、Web、安全检查：全部通过
+```
+
+最终 ZIP 哈希和解压复验记录在随交付包生成的
+`ATHENA_DASHBOARD_VALIDATION.md`。
+
+### GitHub Actions
+
+已有第 9 次工作流证明仪表盘修改前的 v19 基础构建可以成功生成两种镜像。**当前仪表盘源码修改尚未重新运行 GitHub Actions 完整编译**，不能将旧结果视为新仪表盘已进入固件的证明。新版工作流会运行图表测试，并在可定位 rootfs 时检查所有仪表盘文件。
+
+### 真机
+
+**尚未执行本次修改后的 initramfs 真机验收，也未执行 sysupgrade。** 必须先验证 LuCI 首页、Argon 响应式布局、DAED eBPF 告警、三路无线、IoT SSID、恢复入口和重启持久化。initramfs 未通过前不得刷写 sysupgrade。
+
 验证日期：2026-07-27
+
+## 第 9 次 GitHub Actions Artifact
+
+文件：
+
+```text
+Athena-AX6600-v19-9-test.zip
+```
+
+ZIP SHA-256：
+
+```text
+a4f19842aaad8fa91ddf7a43dce3c0d6d334668c6f1e675a02259299e2dfb83e
+```
+
+ZIP 验证：
+
+- ZIP 中共有 36 个文件；
+- ZIP CRC 全部通过；
+- Windows 大小写文件名冲突为 0；
+- `UPSTREAM_SHA256SUMS` 与 `SHA256SUMS` 均存在；
+- validate、defconfig、configcheck、compile、inspect 全部为 success。
+
+固件：
+
+```text
+70c14865ad4f13428bbdcf6698f435d4b9b19292d02966fc4e8f78fd7bab084b  athena-v19-initramfs-uImage.itb
+94b1bf9cbd3183dd60f237dfbc3106ca51b476db46386d41843587dde51e2b79  athena-v19-squashfs-sysupgrade.bin
+```
+
+`firmware/SHA256SUMS` 全部通过。initramfs 被识别为有效的 Device Tree
+Blob/FIT；sysupgrade 被识别为 POSIX tar，包含：
+
+```text
+sysupgrade-jdcloud_re-cs-02/CONTROL
+sysupgrade-jdcloud_re-cs-02/kernel
+sysupgrade-jdcloud_re-cs-02/root
+```
+
+CONTROL：
+
+```text
+BOARD=jdcloud_re-cs-02
+```
+
+内核 5,561,400 字节，rootfs 40,239,104 字节，内核距离 6 MiB 上限仍有
+730,056 字节余量。必需包完整，禁用包为 0。
+
+### 总校验清单问题
+
+根目录 `SHA256SUMS.txt` 的所有普通文件均通过，但列出的 16 个隐藏诊断文件
+没有出现在下载的 Artifact 中。原因是 `actions/upload-artifact` 默认忽略
+以 `.` 开头的文件，而校验清单在上传前已经包含它们。
+
+这不影响固件镜像、manifest、profiles、配置或构建日志，但会破坏 Artifact
+整体可验证性。工作流已加入 `include-hidden-files: true`，并用回归测试保护。
 
 ## 输入证据
 

@@ -1,5 +1,34 @@
 # Athena v19.0.0-rc1 变更摘要
 
+## 现代化只读实时仪表盘
+
+- 新增只读 `athena.dashboard` RPC，以固定 JSON 结构提供系统、CPU、内存、WAN、温度、无线、DAED 和加速状态。
+- LuCI“状态 → 概况”和“Athena 优化 → 状态”统一进入新的 Argon 兼容仪表盘。
+- 新增 WAN、CPU/内存和温度 SVG 曲线；3 秒采样，浏览器内最多 200 点，不写闪存。
+- 新增 DAED eBPF 不兼容、时间未同步、WAN、DNS、无线和温度告警。
+- 页面不包含外部 CDN、远程遥测、配置写入或凭据返回。
+- 构建前源码布局检查和构建后 rootfs 检查均强制要求所有仪表盘资源存在。
+- 保留 DAED 默认关闭、`127.0.0.1:2023` 同源代理、`192.168.50.1:8080` 恢复入口、NSS/Wi-Fi offload 与 ECM/Flow Offload 策略。
+
+## 第 9 次 Artifact 补充修复
+
+第 9 次工作流已经全绿，固件检查、编译和 Artifact 收集均成功。下载后的
+Artifact 仍暴露出一个纯打包问题：
+
+- `SHA256SUMS.txt` 包含 16 个以 `.` 开头的包注册诊断文件；
+- `actions/upload-artifact` 默认不上传隐藏文件；
+- 因此总校验会报告这些诊断文件缺失；
+- `firmware/SHA256SUMS` 以及两个固件本体校验不受影响，均已通过。
+
+工作流现已为 Artifact 上传启用：
+
+```yaml
+include-hidden-files: true
+```
+
+并新增回归测试，确保总校验清单中记录的隐藏诊断文件能够随 Artifact 一起
+上传。
+
 ## 第 8 次云构建结论
 
 第 8 次 GitHub Actions 已成功完成固件编译，两个目标镜像都已生成：

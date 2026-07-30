@@ -5,7 +5,8 @@
   },
   "daede": {
     "repository": "https://github.com/kenzok8/openwrt-daede.git",
-    "commit": "b16dbbd3f94558c30d9a875c7e8daf91d4718747"
+    "commit": "b16dbbd3f94558c30d9a875c7e8daf91d4718747",
+    "package_version": "2026.07.26-r1"
   },
   "vmlinux_btf": {
     "repository": "https://github.com/kenzok8/vmlinux-btf.git",

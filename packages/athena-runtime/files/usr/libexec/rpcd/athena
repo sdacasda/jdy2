@@ -1,9 +1,12 @@
 #!/bin/sh
 . /usr/share/libubox/jshn.sh
+ATHENA_LIBDIR="${ATHENA_LIBDIR:-/usr/lib/athena}"
+. "$ATHENA_LIBDIR/common.sh"
+. "$ATHENA_LIBDIR/dashboard.sh"
 
 case "$1" in
 	list)
-		echo '{"status":{},"health":{},"templates":{},"backups":{},"runtime_apply":{},"rollback":{"id":"String","confirm":"Boolean"}}'
+		echo '{"status":{},"dashboard":{},"health":{},"templates":{},"backups":{},"runtime_apply":{},"rollback":{"id":"String","confirm":"Boolean"}}'
 		;;
 	call)
 		method="$2"
@@ -16,6 +19,7 @@ case "$1" in
 				json_add_string iot_status "$(athena-iot status 2>/dev/null | tr '\n' ' ')"
 				json_dump
 				;;
+			dashboard) athena_dashboard_json ;;
 			health) athena-health --json ;;
 			templates)
 				json_init; json_add_object files

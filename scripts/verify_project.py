@@ -66,6 +66,13 @@ def main() -> int:
                     errors.append(f"{name}: repository must be an HTTPS GitHub URL")
                 if not isinstance(commit, str) or not COMMIT_RE.fullmatch(commit):
                     errors.append(f"{name}: commit must be a 40-character commit")
+            daed_version = lock.get("daede", {}).get("package_version")
+            if not isinstance(daed_version, str) or not re.fullmatch(
+                r"\d{4}\.\d{2}\.\d{2}-r\d+", daed_version
+            ):
+                errors.append(
+                    "daede: package_version must identify the immutable build"
+                )
 
     if not args.allow_incomplete:
         for relative in (

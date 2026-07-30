@@ -44,6 +44,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m unittest discover -s tests -p 'test_*.py' -v
+          node tests/js/test_dashboard_chart.js
           bash scripts/test_runtime_scripts.sh
           python3 scripts/verify_project.py --root .
           python3 scripts/verify_templates.py --templates packages/athena-runtime/files/usr/share/athena/templates --rules packages/athena-runtime/files/usr/share/athena/rules
@@ -69,9 +70,12 @@ jobs:
         run: |
           cd openwrt
           ./scripts/feeds update -a
+          cd ..
+          bash scripts/remove_feed_conflicts.sh openwrt
+          bash scripts/prepare_packages.sh openwrt
+          cd openwrt
           ./scripts/feeds install -a
           cd ..
-          bash scripts/prepare_packages.sh openwrt
           bash scripts/inject_runtime.sh openwrt
           test -f openwrt/package/custom/athena-runtime/Makefile
           test -f openwrt/package/custom/luci-app-athena/Makefile
@@ -88,13 +92,33 @@ jobs:
       - name: Verify effective OpenWrt config
         id: configcheck
         run: |
+          set -euo pipefail
           bash scripts/verify_config.sh openwrt/.config openwrt/package/custom/daed/Makefile
+          mkdir -p daed-provenance
+          python3 scripts/verify_daed_provenance.py \
+            --packageinfo openwrt/tmp/.packageinfo \
+            --lock SOURCES.lock.json \
+            --makefile openwrt/package/custom/daed/Makefile \
+            | tee daed-provenance/prebuild.txt
       - name: Build both images
         id: compile
         continue-on-error: true
         run: |
+          set -euo pipefail
           make -C openwrt download -j2
           make -C openwrt -j"${{ inputs.compile_jobs }}" V=s 2>&1 | tee build.log
+      - name: Verify compiled DAED provenance
+        id: daedbuild
+        if: steps.compile.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          python3 scripts/verify_daed_provenance.py \
+            --packageinfo openwrt/tmp/.packageinfo \
+            --lock SOURCES.lock.json \
+            --makefile openwrt/package/custom/daed/Makefile \
+            --build-log build.log \
+            | tee daed-provenance/postbuild.txt
       - name: Inspect firmware
         id: inspect
         continue-on-error: true
@@ -109,6 +133,7 @@ jobs:
           defconfig=${{ steps.defconfig.outcome }}
           configcheck=${{ steps.configcheck.outcome }}
           compile=${{ steps.compile.outcome }}
+          daedbuild=${{ steps.daedbuild.outcome }}
           inspect=${{ steps.inspect.outcome }}
           EOF
           if [ -d openwrt/bin/targets/qualcommax/ipq60xx ]; then
@@ -130,11 +155,15 @@ jobs:
               cp -a openwrt/logs/package/custom "$OUTPUT/diagnostics/package-scan-logs"
             fi
           fi
+          if [ -d daed-provenance ]; then
+            cp -a daed-provenance "$OUTPUT/diagnostics/daed-provenance"
+          fi
       - uses: actions/upload-artifact@v6
         if: always()
         with:
           name: Athena-AX6600-v19-${{ github.run_number }}-${{ inputs.release_stage }}
           path: Athena-AX6600-v19-${{ github.run_number }}
+          include-hidden-files: true
           retention-days: 14
       - name: Enforce build result
         if: always()
@@ -143,6 +172,7 @@ jobs:
           echo "defconfig=${{ steps.defconfig.outcome }}"
           echo "configcheck=${{ steps.configcheck.outcome }}"
           echo "compile=${{ steps.compile.outcome }}"
+          echo "daedbuild=${{ steps.daedbuild.outcome }}"
           echo "inspect=${{ steps.inspect.outcome }}"
           if [ "${{ steps.validate.outcome }}" != success ]; then
             echo "Source validation already reported the primary failure."
@@ -153,4 +183,5 @@ jobs:
             exit 0
           fi
           test "${{ steps.compile.outcome }}" = success
+          test "${{ steps.daedbuild.outcome }}" = success
           test "${{ steps.inspect.outcome }}" = success
