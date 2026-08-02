@@ -17,6 +17,15 @@ DASHBOARD_ROOTFS_FILES = (
     "usr/share/luci/menu.d/zz-athena-dashboard.json",
 )
 
+WEB_ROOTFS_FILES = (
+    "etc/nginx/conf.d/athena-daed.locations",
+    "etc/uci-defaults/95-athena-web",
+    "www/athena-recovery.html",
+    "www/luci-static/resources/view/athena/daed-panel.js",
+    "usr/share/luci/menu.d/luci-app-athena.json",
+    "usr/bin/daed",
+)
+
 
 class FirmwareInspectionTests(unittest.TestCase):
     def make_fixture(self, root: Path, dashboard_files: bool = False):
@@ -38,6 +47,7 @@ class FirmwareInspectionTests(unittest.TestCase):
             "luci-app-argon-config",
             "nginx-ssl",
             "uhttpd",
+            "uhttpd-mod-lua",
         )
         (target / "libwrt.manifest").write_text(
             "".join(f"{package} - 1\n" for package in manifest_packages),
@@ -47,6 +57,20 @@ class FirmwareInspectionTests(unittest.TestCase):
         rootfs.mkdir(parents=True)
         persistent = rootfs / "jdcloud_re-cs-02-uImage.itb"
         persistent.write_bytes(b"persistent-kernel")
+        web_contents = {
+            "etc/nginx/conf.d/athena-daed.locations": "location /athena-daed/ {}\nlocation = /athena-daed/graphql {}\n",
+            "etc/uci-defaults/95-athena-web": "delete uhttpd.main.listen_http\ndelete uhttpd.main.listen_https\nset daed.config.listen_addr='127.0.0.1:2023'\nset daed.config.enabled='0'\n",
+            "www/athena-recovery.html": "<!doctype html><title>Athena recovery</title>\n",
+            "www/luci-static/resources/view/athena/daed-panel.js": "src: '/athena-daed/'\n",
+            "usr/share/luci/menu.d/luci-app-athena.json": "{}\n",
+        }
+        for relative, content in web_contents.items():
+            path = rootfs / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+        daed = rootfs / "usr/bin/daed"
+        daed.parent.mkdir(parents=True, exist_ok=True)
+        daed.write_bytes(b"ELF\x00/athena-daed/graphql\x00")
         if dashboard_files:
             for relative in DASHBOARD_ROOTFS_FILES:
                 path = rootfs / relative
@@ -88,6 +112,10 @@ class FirmwareInspectionTests(unittest.TestCase):
             self.assertEqual(report["missing_packages"], [])
             self.assertTrue(report["dashboard_files"]["checked"])
             self.assertEqual(report["dashboard_files"]["missing"], [])
+            self.assertTrue(report["web_integration"]["checked"])
+            self.assertEqual(report["web_integration"]["missing"], [])
+            self.assertEqual(report["web_integration"]["forbidden"], [])
+            self.assertEqual(report["web_integration"]["daed_endpoint"], "same-origin")
 
     def test_missing_dashboard_file_fails_when_rootfs_is_available(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as directory:
@@ -123,6 +151,75 @@ class FirmwareInspectionTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertFalse(report["dashboard_files"]["checked"])
             self.assertEqual(report["dashboard_files"]["missing"], [])
+
+    def test_missing_daed_locations_fails(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            root = Path(directory)
+            openwrt, rootfs = self.make_fixture(root, dashboard_files=True)
+            (rootfs / "etc/nginx/conf.d/athena-daed.locations").unlink()
+            output = root / "inspection"
+            result = self.inspect(openwrt, output)
+            report = json.loads((output / "firmware-inspection.json").read_text(encoding="utf-8"))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("/etc/nginx/conf.d/athena-daed.locations", report["web_integration"]["missing"])
+
+    def test_old_daed_http_context_file_fails(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            root = Path(directory)
+            openwrt, rootfs = self.make_fixture(root, dashboard_files=True)
+            (rootfs / "etc/nginx/conf.d/athena-daed.conf").write_text("location /bad {}\n", encoding="utf-8")
+            output = root / "inspection"
+            result = self.inspect(openwrt, output)
+            report = json.loads((output / "firmware-inspection.json").read_text(encoding="utf-8"))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("/etc/nginx/conf.d/athena-daed.conf", report["web_integration"]["forbidden"])
+
+    def test_missing_uhttpd_lua_runtime_fails(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            root = Path(directory)
+            openwrt, _ = self.make_fixture(root, dashboard_files=True)
+            manifest = openwrt / "bin/targets/qualcommax/ipq60xx/libwrt.manifest"
+            manifest.write_text(manifest.read_text(encoding="utf-8").replace("uhttpd-mod-lua - 1\n", ""), encoding="utf-8")
+            output = root / "inspection"
+            result = self.inspect(openwrt, output)
+            report = json.loads((output / "firmware-inspection.json").read_text(encoding="utf-8"))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("uhttpd-mod-lua", report["missing_packages"])
+
+    def test_browser_visible_daed_port_in_binary_fails(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            root = Path(directory)
+            openwrt, rootfs = self.make_fixture(root, dashboard_files=True)
+            (rootfs / "usr/bin/daed").write_bytes(b"ELF\x00:2023/graphql\x00")
+            output = root / "inspection"
+            result = self.inspect(openwrt, output)
+            report = json.loads((output / "firmware-inspection.json").read_text(encoding="utf-8"))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(report["web_integration"]["daed_endpoint"], "browser-port")
+
+    def test_firstboot_must_remove_primary_uhttpd_listener(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            root = Path(directory)
+            openwrt, rootfs = self.make_fixture(root, dashboard_files=True)
+            defaults = rootfs / "etc/uci-defaults/95-athena-web"
+            defaults.write_text(defaults.read_text(encoding="utf-8").replace("delete uhttpd.main.listen_http\n", ""), encoding="utf-8")
+            output = root / "inspection"
+            result = self.inspect(openwrt, output)
+            report = json.loads((output / "firmware-inspection.json").read_text(encoding="utf-8"))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("uhttpd-primary-listener", report["web_integration"]["forbidden"])
+
+    def test_firstboot_requires_daed_loopback_default(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            root = Path(directory)
+            openwrt, rootfs = self.make_fixture(root, dashboard_files=True)
+            defaults = rootfs / "etc/uci-defaults/95-athena-web"
+            defaults.write_text(defaults.read_text(encoding="utf-8").replace("set daed.config.listen_addr='127.0.0.1:2023'\n", ""), encoding="utf-8")
+            output = root / "inspection"
+            result = self.inspect(openwrt, output)
+            report = json.loads((output / "firmware-inspection.json").read_text(encoding="utf-8"))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("daed-loopback-default", report["web_integration"]["missing"])
 
 
 if __name__ == "__main__":

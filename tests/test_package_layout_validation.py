@@ -22,7 +22,7 @@ def write_minimum_layout(root: Path, runtime_makefile: str, luci_makefile: str) 
         "packages/luci-app-athena/Makefile": luci_makefile,
         "packages/athena-runtime/files/usr/bin/athena-setup": "#!/bin/sh\n",
         "packages/athena-runtime/files/usr/bin/athena-iot": "#!/bin/sh\n",
-        "packages/luci-app-athena/root/etc/nginx/conf.d/athena-daed.conf": (
+        "packages/luci-app-athena/root/etc/nginx/conf.d/athena-daed.locations": (
             "location /athena-daed/ {}\n"
         ),
         "packages/athena-runtime/files/usr/lib/athena/dashboard.sh": "#!/bin/sh\n",

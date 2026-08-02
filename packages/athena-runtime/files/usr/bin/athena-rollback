@@ -6,13 +6,14 @@ ATHENA_LIBDIR="${ATHENA_LIBDIR:-/usr/lib/athena}"
 
 component=all
 if [ "${1:-}" = "--component" ]; then
-	[ "$#" -eq 3 ] || athena_die "usage: athena-rollback --component daed BACKUP_ID"
+	[ "$#" -eq 2 ] || [ "$#" -eq 3 ] || athena_die "usage: athena-rollback [--component all|daed|web] [BACKUP_ID]"
 	component="$2"
-	id="$3"
+	id="${3:-}"
 else
+	[ "$#" -le 1 ] || athena_die "usage: athena-rollback [--component all|daed|web] [BACKUP_ID]"
 	id="${1:-}"
 fi
-case "$component" in all|daed) ;; *) athena_die "unknown rollback component" ;; esac
+case "$component" in all|daed|web) ;; *) athena_die "unknown rollback component" ;; esac
 case "$id" in ""|*/*|*\\*|.|..) athena_die "invalid backup ID" ;; esac
 
 root="$(athena_root /root/athena-backups)"
@@ -28,19 +29,37 @@ restore_archive() {
 	tar -xzf "$archive" -C "$(athena_root /)"
 }
 
-if [ "$component" = daed ]; then
-	restore_archive "$directory/daed-database.tar.gz"
-else
-	restore_archive "$directory/etc-config.tar.gz"
-	restore_archive "$directory/daed-database.tar.gz"
-	restore_archive "$directory/web-config.tar.gz"
-	restore_archive "$directory/runtime-config.tar.gz"
-fi
+case "$component" in
+	daed)
+		restore_archive "$directory/daed-database.tar.gz"
+		;;
+	web)
+		restore_archive "$directory/web-config.tar.gz"
+		;;
+	all)
+		restore_archive "$directory/etc-config.tar.gz"
+		restore_archive "$directory/daed-database.tar.gz"
+		restore_archive "$directory/web-config.tar.gz"
+		restore_archive "$directory/runtime-config.tar.gz"
+		;;
+esac
 
 if [ "$ATHENA_ROOT" = "/" ]; then
-	/etc/init.d/rpcd restart 2>/dev/null || true
-	/etc/init.d/uhttpd restart 2>/dev/null || true
-	/etc/init.d/nginx restart 2>/dev/null || true
+	if [ "$component" = web ]; then
+		/etc/init.d/daed stop 2>/dev/null || true
+		/etc/init.d/uhttpd restart 2>/dev/null || true
+		if nginx -t >/dev/null 2>&1; then
+			/etc/init.d/nginx restart 2>/dev/null || true
+		else
+			athena_unlock
+			trap - EXIT INT TERM
+			athena_die "restored Nginx configuration is invalid; recovery uHTTPd remains available"
+		fi
+	else
+		/etc/init.d/rpcd restart 2>/dev/null || true
+		/etc/init.d/uhttpd restart 2>/dev/null || true
+		/etc/init.d/nginx restart 2>/dev/null || true
+	fi
 fi
 athena_unlock
 trap - EXIT INT TERM

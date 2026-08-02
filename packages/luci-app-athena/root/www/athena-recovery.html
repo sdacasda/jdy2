@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Athena 恢复入口</title>
+  <style>
+    body{margin:0;background:#111827;color:#e5e7eb;font:16px/1.6 system-ui,sans-serif}
+    main{max-width:760px;margin:8vh auto;padding:28px;background:#1f2937;border-radius:16px}
+    h1{margin-top:0}a{color:#93c5fd}code{display:block;margin:8px 0;padding:10px;background:#0f172a;border-radius:8px;overflow:auto}
+  </style>
+</head>
+<body><main>
+  <h1>Athena AX6600 恢复入口</h1>
+  <p>当前恢复服务独立运行在 <strong>192.168.50.1:8080</strong>，即使 DAED 或 Nginx 故障也应保持可用。</p>
+  <p><a href="/cgi-bin/luci/">进入最小 LuCI 恢复界面</a></p>
+  <p>也可以通过 SSH 依次检查：</p>
+  <code>/etc/init.d/daed stop</code>
+  <code>nginx -t &amp;&amp; /etc/init.d/nginx restart</code>
+  <code>athena-health --verbose</code>
+  <code>athena-rollback --component web BACKUP_ID</code>
+</main></body>
+</html>

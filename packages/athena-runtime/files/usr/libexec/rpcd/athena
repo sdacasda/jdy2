@@ -1,24 +1,111 @@
 #!/bin/sh
-. /usr/share/libubox/jshn.sh
+. "${ATHENA_JSHN:-/usr/share/libubox/jshn.sh}"
 ATHENA_LIBDIR="${ATHENA_LIBDIR:-/usr/lib/athena}"
 . "$ATHENA_LIBDIR/common.sh"
 . "$ATHENA_LIBDIR/dashboard.sh"
 
+athena_daed_enabled() {
+	if [ "${ATHENA_DAED_ENABLED+x}" = x ]; then
+		[ "$ATHENA_DAED_ENABLED" = 1 ]
+	else
+		/etc/init.d/daed enabled >/dev/null 2>&1
+	fi
+}
+
+athena_daed_running() {
+	if [ "${ATHENA_DAED_RUNNING+x}" = x ]; then
+		[ "$ATHENA_DAED_RUNNING" = 1 ]
+	else
+		pidof daed >/dev/null 2>&1
+	fi
+}
+
+athena_daed_api_reachable() {
+	if [ "${ATHENA_DAED_API_REACHABLE+x}" = x ]; then
+		[ "$ATHENA_DAED_API_REACHABLE" = 1 ]
+		return
+	fi
+	athena_daed_running || return 1
+	if command -v wget >/dev/null 2>&1; then
+		response="$(wget -S -O /dev/null -T 2 http://127.0.0.1:2023/graphql 2>&1 || true)"
+		printf '%s\n' "$response" | grep -Eq 'HTTP/[0-9.]+[[:space:]]+[0-9]{3}'
+		return
+	fi
+	if command -v nc >/dev/null 2>&1; then
+		printf 'GET /graphql HTTP/1.0\r\nHost: localhost\r\n\r\n' |
+			nc -w 2 127.0.0.1 2023 2>/dev/null |
+			grep -Eq '^HTTP/[0-9.]+[[:space:]]+[0-9]{3}'
+		return
+	fi
+	return 1
+}
+
+athena_daed_error_class() {
+	if [ "${ATHENA_DAED_ERROR_CLASS+x}" = x ]; then
+		printf '%s\n' "$ATHENA_DAED_ERROR_CLASS"
+		return
+	fi
+	if athena_daed_running && athena_daed_api_reachable; then
+		printf 'none\n'
+		return
+	fi
+	log="$(athena_root /var/log/daed/daed.log)"
+	recent="$(tail -n 200 "$log" 2>/dev/null || true)"
+	if printf '%s\n' "$recent" | grep -Eqi 'load eBPF objects|verifier|invalid argument'; then
+		printf 'ebpf\n'
+	elif printf '%s\n' "$recent" | grep -Eqi 'out of memory|oom|cannot allocate|allocation failed'; then
+		printf 'memory\n'
+	elif printf '%s\n' "$recent" | grep -Eqi 'parse.*config|config(uration)?.*(invalid|failed|error)|load.*config.*failed'; then
+		printf 'configuration\n'
+	else
+		printf 'unavailable\n'
+	fi
+}
+
+athena_status_json() {
+	athena_daed_enabled && enabled=1 || enabled=0
+	athena_daed_running && running=1 || running=0
+	athena_daed_api_reachable && api=1 || api=0
+	json_init
+	json_add_string version "19.0.0-rc1"
+	json_add_string setup_state "$(sed -n 's/^STATE=//p' "$(athena_root /var/lib/athena/setup-state)" 2>/dev/null | tail -n1)"
+	json_add_boolean daed_enabled "$enabled"
+	json_add_boolean daed_running "$running"
+	json_add_boolean daed_api_reachable "$api"
+	json_add_string daed_error_class "$(athena_daed_error_class)"
+	json_add_string recovery_url "http://192.168.50.1:8080/"
+	json_add_string iot_status "$(athena-iot status 2>/dev/null | tr '\n' ' ')"
+	json_dump
+}
+
+athena_daed_start() {
+	/etc/init.d/daed start >/dev/null 2>&1 || true
+	i=0
+	while [ "$i" -lt 5 ]; do
+		if athena_daed_running && athena_daed_api_reachable; then
+			break
+		fi
+		i=$((i + 1))
+		sleep 1
+	done
+	athena_status_json
+}
+
+athena_daed_stop() {
+	/etc/init.d/daed stop >/dev/null 2>&1 || true
+	athena_status_json
+}
+
 case "$1" in
 	list)
-		echo '{"status":{},"dashboard":{},"health":{},"templates":{},"backups":{},"runtime_apply":{},"rollback":{"id":"String","confirm":"Boolean"}}'
+		echo '{"status":{},"dashboard":{},"health":{},"templates":{},"backups":{},"runtime_apply":{},"daed_start":{},"daed_stop":{},"rollback":{"id":"String","confirm":"Boolean"}}'
 		;;
 	call)
 		method="$2"
 		case "$method" in
-			status)
-				json_init; json_add_string version "19.0.0-rc1"
-				json_add_string setup_state "$(sed -n 's/^STATE=//p' /var/lib/athena/setup-state 2>/dev/null | tail -n1)"
-				json_add_boolean daed_running "$(pidof daed >/dev/null 2>&1 && echo 1 || echo 0)"
-				json_add_string recovery_url "http://192.168.50.1:8080/"
-				json_add_string iot_status "$(athena-iot status 2>/dev/null | tr '\n' ' ')"
-				json_dump
-				;;
+			status) athena_status_json ;;
+			daed_start) athena_daed_start ;;
+			daed_stop) athena_daed_stop ;;
 			dashboard) athena_dashboard_json ;;
 			health) athena-health --json ;;
 			templates)

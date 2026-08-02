@@ -60,9 +60,24 @@ def run_collect(topdir,output,inspection,build_log):
 class ArtifactTests(unittest.TestCase):
  def test_layout_and_strict_images(self):
   t=(ROOT/"scripts/collect_output.sh").read_text(encoding="utf-8")
-  for x in ("firmware,metadata,diagnostics,tools,docs","athena-v19-initramfs-uImage.itb","athena-v19-squashfs-sysupgrade.bin","SHA256SUMS.txt"):
+  for x in ("firmware,metadata,diagnostics,tools,docs","athena-v19-initramfs-uImage.itb","athena-v19-squashfs-sysupgrade.bin","SHA256SUMS.txt","verify_after_flash.sh","WEB_RECOVERY.md","firmware-inspection.json","kernel-size.txt"):
    self.assertIn(x,t)
   self.assertIn('\"${#initramfs[@]}\" -eq 1',t)
+
+ def test_after_flash_checks_both_web_entries_and_daed_isolation(self):
+  t=(ROOT/"scripts/verify_after_flash.sh").read_text(encoding="utf-8")
+  for token in (
+   "nginx -t",
+   "pidof nginx",
+   "192.168.50.1:8080",
+   "athena-recovery.html",
+   "daed.config.enabled",
+   "127.0.0.1:2023",
+   "/athena-daed/graphql",
+   "0.0.0.0:2023",
+   "[::]:2023",
+  ):
+   self.assertIn(token,t)
 
  def test_collection_reuses_the_images_that_inspection_validated(self):
   with tempfile.TemporaryDirectory(dir=ROOT) as directory:

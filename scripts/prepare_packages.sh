@@ -32,7 +32,10 @@ checkout_locked() {
 checkout_locked daede "$WORK/daede"
 cp -a "$WORK/daede/daed" "$CUSTOM/daed"
 cp -a "$WORK/daede/luci-app-daede" "$CUSTOM/luci-app-daede"
+install -m 0644 "$PROJECT_ROOT/scripts/patch_daed_web.py" \
+	"$CUSTOM/daed/files/patch_daed_web.py"
 python3 "$PROJECT_ROOT/scripts/patch_daed_btf.py" "$CUSTOM/daed/Makefile"
+python3 "$PROJECT_ROOT/scripts/patch_daed_package.py" "$CUSTOM/daed/Makefile"
 
 checkout_locked vmlinux_btf "$WORK/vmlinux-btf"
 cp -a "$WORK/vmlinux-btf/vmlinux-btf" "$CUSTOM/vmlinux-btf"

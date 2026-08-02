@@ -5,7 +5,7 @@
       "ubus": { "athena": [ "status", "dashboard", "health", "templates", "backups" ] }
     },
     "write": {
-      "ubus": { "athena": [ "runtime_apply", "rollback" ] }
+      "ubus": { "athena": [ "runtime_apply", "rollback", "daed_start", "daed_stop" ] }
     }
   }
 }

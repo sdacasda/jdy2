@@ -54,7 +54,8 @@ athena_backup_create() {
 
 	athena_backup_archive "$stage/etc-config.tar.gz" etc/config
 	athena_backup_archive "$stage/daed-database.tar.gz" etc/daed
-	athena_backup_archive "$stage/web-config.tar.gz" etc/nginx etc/config/uhttpd etc/config/nginx
+	athena_backup_archive "$stage/web-config.tar.gz" \
+		etc/nginx etc/config/uhttpd etc/config/nginx etc/config/daed
 	athena_backup_archive "$stage/runtime-config.tar.gz" etc/config/athena var/lib/athena etc/init.d/athena-runtime
 	{
 		printf 'version=v19\n'

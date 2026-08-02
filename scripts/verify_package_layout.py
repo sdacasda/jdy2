@@ -36,7 +36,7 @@ def main():
       "packages/athena-runtime/Makefile","packages/luci-app-athena/Makefile",
       "packages/athena-runtime/files/usr/bin/athena-setup",
       "packages/athena-runtime/files/usr/bin/athena-iot",
-      "packages/luci-app-athena/root/etc/nginx/conf.d/athena-daed.conf",
+      "packages/luci-app-athena/root/etc/nginx/conf.d/athena-daed.locations",
       *DASHBOARD_FILES]
     missing=[p for p in required if not (root/p).is_file()]
     if missing: raise SystemExit("missing: "+", ".join(missing))

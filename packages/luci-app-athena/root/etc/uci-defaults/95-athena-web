@@ -4,9 +4,15 @@ set daed.config.listen_addr='127.0.0.1:2023'
 set daed.config.enabled='0'
 set luci.main.mediaurlbase='/luci-static/argon'
 set luci.main.lang='auto'
+delete uhttpd.main.listen_http
+delete uhttpd.main.listen_https
+delete uhttpd.recovery
 set uhttpd.recovery='uhttpd'
 add_list uhttpd.recovery.listen_http='192.168.50.1:8080'
 set uhttpd.recovery.home='/www'
+add_list uhttpd.recovery.index_page='athena-recovery.html'
+add_list uhttpd.recovery.lua_prefix='/cgi-bin/luci=/usr/lib/lua/luci/sgi/uhttpd.lua'
+set uhttpd.recovery.ubus_prefix='/ubus'
 set uhttpd.recovery.rfc1918_filter='1'
 commit daed
 commit luci
@@ -14,7 +20,12 @@ commit uhttpd
 UCI
 /etc/init.d/daed disable >/dev/null 2>&1 || true
 /etc/init.d/daed stop >/dev/null 2>&1 || true
-nginx -t >/dev/null 2>&1 && /etc/init.d/nginx reload >/dev/null 2>&1 || logger -t athena-web "nginx validation failed; recovery uhttpd remains available"
 /etc/init.d/uhttpd enable >/dev/null 2>&1 || true
 /etc/init.d/uhttpd restart >/dev/null 2>&1 || true
+if nginx -t >/dev/null 2>&1; then
+	/etc/init.d/nginx enable >/dev/null 2>&1 || true
+	/etc/init.d/nginx restart >/dev/null 2>&1 || true
+else
+	logger -t athena-web "nginx validation failed; recovery uhttpd remains available"
+fi
 exit 0

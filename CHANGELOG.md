@@ -1,17 +1,27 @@
 # Changelog
 
-## v19.0.0-rc1
+## v19.0.0-rc1 Web/DAED 修复
 
-- LAN 改为 `192.168.50.1`，避免与常见光猫网段冲突。
-- DAED 默认关闭并仅监听环回地址；通过 Nginx 同源嵌入 LuCI。
-- Argon 深色主题为默认，Bootstrap 与 8080 恢复入口保留。
-- 新增 `athena-setup`、`athena-health`、`athena-backup`、`athena-rollback`、`athena-runtime`、`athena-iot`。
-- 新增国内 UDP DNS、国外代理 DoH、节点 bootstrap 直连模板。
-- 新增 Steam、Xbox、游戏、Minecraft 与 BT 可选分流模板。
-- 保留 NSS/Wi-Fi offload，停止 ECM frontend 与软件/硬件 Flow Offload。
-- 新增可选的独立 2.4 GHz IoT 兼容 SSID。
-- 所有外部源码锁定到完整提交；DAED 锁定为 `v2026.07.26` 对应提交。
-- 缺少任一固件镜像、超出 6 MiB 内核槽或产物校验失败时构建失败。
+- 修复 Nginx 与 uHTTPd 同时占用主 Web 端口的问题：Nginx 独占 80/443，uHTTPd 只提供 `192.168.50.1:8080` 恢复入口。
+- 将 DAED 代理从错误的 `conf.d/*.conf` 改为服务器上下文中的 `*.locations`。
+- 构建时精确修补 DAED 前端 GraphQL 地址为同源 `/athena-daed/graphql`，上游布局变化时立即失败。
+- DAED 面板新增“开机启用、进程运行、API 可达”三态显示和启动/停止/重试操作。
+- eBPF、配置、内存和不可用错误只返回脱敏分类，不泄露节点或日志内容。
+- 新增 Web 端口、Nginx、恢复页面和 DAED API 健康检查。
+- 新增 `athena-rollback --component web`，仅恢复 Web/服务配置，不修改 `wing.db`。
+- 固件检查新增同源 DAED 端点、恢复页面、uHTTPd Lua、旧 Nginx 文件和默认监听策略门槛。
+- 真机验证脚本新增主 LuCI、恢复入口、DAED 隔离与同源 GraphQL 检查。
+- 修复用户文档中文编码。
+
+## v19.0.0-rc1 基础功能
+
+- LAN 改为 `192.168.50.1`。
+- DAED 默认关闭且只监听回环地址。
+- Argon 深色主题默认启用，Bootstrap 保留。
+- 新增现代化图表首页、运行时工具、DNS/路由模板、游戏与 BT 分流模板。
+- 新增可选独立 2.4 GHz IoT SSID。
+- 保留 NSS/Wi-Fi offload，停止 ECM frontend 与 Flow Offload。
+- 外部源码全部锁定，固件双镜像与 6 MiB 内核槽强制检查。
 
 ## v18
 

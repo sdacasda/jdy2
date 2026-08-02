@@ -17,6 +17,9 @@ class LuciAppTests(unittest.TestCase):
         write_methods = acl["luci-app-athena"]["write"]["ubus"]["athena"]
         self.assertIn("dashboard", read_methods)
         self.assertNotIn("dashboard", write_methods)
+        for method in ("daed_start", "daed_stop"):
+            self.assertIn(method, write_methods)
+            self.assertNotIn(method, read_methods)
 
     def test_dashboard_overrides_only_the_overview_and_athena_status(self):
         override = json.loads(
@@ -51,6 +54,28 @@ class LuciAppTests(unittest.TestCase):
         self.assertNotIn("fs.exec", text)
         self.assertNotIn("192.168.50.1:2023", text)
         self.assertIn("/athena-daed/", text)
+
+    def test_daed_panel_is_same_origin_and_menu_json_is_utf8(self):
+        for name in ("luci-app-athena.json", "zz-athena-dashboard.json"):
+            json.loads(
+                (
+                    ROOT
+                    / "packages/luci-app-athena/root/usr/share/luci/menu.d"
+                    / name
+                ).read_text(encoding="utf-8", errors="strict")
+            )
+        panel = (
+            ROOT
+            / "packages/luci-app-athena/htdocs/luci-static/resources/view/athena/daed-panel.js"
+        ).read_text(encoding="utf-8", errors="strict")
+        self.assertIn("/athena-daed/", panel)
+        self.assertNotIn(":2023", panel)
+        for field in ("daed_enabled", "daed_running", "daed_api_reachable"):
+            self.assertIn(field, panel)
+        for method in ("daed_start", "daed_stop"):
+            self.assertIn(method, panel)
+        self.assertNotIn("http://", panel)
+        self.assertNotIn("https://", panel)
 
 if __name__ == "__main__":
     unittest.main()

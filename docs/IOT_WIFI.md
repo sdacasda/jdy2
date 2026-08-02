@@ -1,6 +1,6 @@
-# 2.4 GHz IoT 兼容网络
+# 独立 2.4 GHz IoT Wi‑Fi
 
-很多智能家居只支持 WPA2、20 MHz 和传统 2.4 GHz。v19 提供一个默认关闭、与主 Wi-Fi 分离的兼容 SSID：
+部分智能家居只支持传统 2.4 GHz、WPA2 和 20 MHz。v19 提供默认关闭、与主 Wi‑Fi 分离的 IoT SSID：
 
 ```sh
 athena-iot setup
@@ -8,13 +8,20 @@ athena-iot status
 athena-iot diagnose
 ```
 
-默认特性：WPA2-PSK/AES、PMF 关闭、20 MHz、CN、固定信道 1/6/11、802.11r/k/v 关闭、WMM 开启、SSID 可见、客户端隔离关闭、Wi-Fi 6/HE 关闭。它加入现有 LAN，不创建新 VLAN。
+兼容模式默认使用：
 
-停用或移除：
+- 2.4 GHz、20 MHz、国家代码 CN；
+- 固定信道 1、6 或 11；
+- WPA2-PSK/AES；
+- PMF、802.11r/k/v、Wi‑Fi 6/HE 关闭；
+- WMM 开启、SSID 可见、客户端隔离关闭；
+- 加入现有 LAN，不额外创建 VLAN。
+
+停用或删除：
 
 ```sh
 athena-iot disable
 athena-iot remove --yes
 ```
 
-每次修改前自动创建可校验备份。诊断不会显示 SSID、密码、客户端名称或 MAC。
+每次变更前会创建可校验备份。诊断输出不会显示 Wi‑Fi 密码、设备名称或客户端 MAC。

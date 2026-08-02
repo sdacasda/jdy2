@@ -13,6 +13,8 @@ class BuildScriptTests(unittest.TestCase):
   s=(ROOT/"scripts/stage_local_packages.sh").read_text(encoding="utf-8")
   i=(ROOT/"scripts/inject_runtime.sh").read_text(encoding="utf-8")
   self.assertIn("SOURCES.lock.json",p); self.assertNotIn("main}",p); self.assertIn("rev-parse HEAD",p)
+  self.assertIn("patch_daed_web.py",p)
+  self.assertIn("patch_daed_package.py",p)
   self.assertIn("athena-runtime luci-app-athena",s)
   self.assertIn('PROJECT_ROOT/packages/$package',s)
   self.assertIn("192.168.50.1",i); self.assertIn("127.0.0.1:2023",i)

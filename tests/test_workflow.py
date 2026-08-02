@@ -7,6 +7,9 @@ class WorkflowTests(unittest.TestCase):
   for x in ("SOURCES.lock.json","build_profile","release_stage","6291456","131072","inspect_firmware.py","Athena-AX6600-v19","Restore executable permissions","BUILD_NOT_AVAILABLE.txt","Generate effective OpenWrt config","Verify effective OpenWrt config","effective.config"):
    self.assertIn(x,t)
   self.assertIn("node tests/js/test_dashboard_chart.js",t)
+  self.assertIn("python3 scripts/verify_web_config.py --root .",t)
+  self.assertIn("python3 scripts/inspect_firmware.py",t)
+  self.assertIn("firmware-inspection.json",t)
   self.assertNotIn("create-release",t.lower())
 
  def test_vmlinux_btf_host_dependency_is_installed_and_verified(self):
