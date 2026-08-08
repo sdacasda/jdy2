@@ -55,4 +55,28 @@ class WorkflowTests(unittest.TestCase):
    t,
    r"name: Build both images[\s\S]*?run: \|\n\s+set -euo pipefail",
   )
+
+ def test_pinned_daed_source_is_assembled_before_openwrt_download(self):
+  t=(ROOT/".github/workflows/build-athena-v19.yml").read_text(encoding="utf-8")
+  self.assertRegex(t,r"actions/setup-go@v6[\s\S]*?go-version:\s*[\"']1\.26\.0[\"']")
+  self.assertRegex(t,r"actions/setup-node@v5[\s\S]*?node-version:\s*24")
+  assemble=t.index("bash scripts/assemble_daed_source.sh openwrt")
+  self.assertIn("make -C openwrt package/daed/download V=s",t)
+  validate_archive=t.index("make -C openwrt package/daed/download V=s")
+  download=t.index("make -C openwrt download -j2")
+  self.assertLess(assemble,validate_archive)
+  self.assertLess(validate_archive,download)
+  self.assertLess(assemble,download)
+  self.assertIn("daed-source-provenance",t)
+
+ def test_daed_cache_is_saved_immediately_after_source_preflight(self):
+  t=(ROOT/".github/workflows/build-athena-v19.yml").read_text(encoding="utf-8")
+  restore=t.index("actions/cache/restore@v5")
+  assemble=t.index("name: Assemble pinned DAED source")
+  save=t.index("actions/cache/save@v5")
+  compile_step=t.index("name: Build both images")
+  self.assertLess(restore,assemble)
+  self.assertLess(assemble,save)
+  self.assertLess(save,compile_step)
+  self.assertIn("steps.daedcache.outputs.cache-hit != 'true'",t)
 if __name__=="__main__": unittest.main()

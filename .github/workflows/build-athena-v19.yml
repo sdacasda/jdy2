@@ -63,6 +63,17 @@ jobs:
           command -v pahole
           clang --version
           pahole --version
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.0"
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - uses: actions/cache/restore@v5
+        id: daedcache
+        with:
+          path: .cache/daed-source
+          key: daed-source-${{ runner.os }}-${{ hashFiles('SOURCES.lock.json', 'scripts/assemble_daed_source.sh', 'scripts/install_daed_source.py', 'scripts/verify_daed_source_cache.py', 'scripts/patch_daed_web.py') }}
       - name: Clone immutable LiBwrt source
         run: |
           REPO="$(jq -r '.libwrt.repository' SOURCES.lock.json)"
@@ -106,6 +117,22 @@ jobs:
             --lock SOURCES.lock.json \
             --makefile openwrt/package/custom/daed/Makefile \
             | tee daed-provenance/prebuild.txt
+      - name: Assemble pinned DAED source
+        id: daedsource
+        run: |
+          set -euo pipefail
+          mkdir -p daed-source-provenance
+          bash scripts/assemble_daed_source.sh openwrt 2>&1 \
+            | tee daed-source-provenance/assembly.log
+          make -C openwrt package/daed/download V=s 2>&1 \
+            | tee daed-source-provenance/openwrt-download-check.log
+      - uses: actions/cache/save@v5
+        name: Save verified DAED source cache
+        if: steps.daedsource.outcome == 'success' && steps.daedcache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        with:
+          path: .cache/daed-source
+          key: daed-source-${{ runner.os }}-${{ hashFiles('SOURCES.lock.json', 'scripts/assemble_daed_source.sh', 'scripts/install_daed_source.py', 'scripts/verify_daed_source_cache.py', 'scripts/patch_daed_web.py') }}
       - name: Build both images
         id: compile
         continue-on-error: true
@@ -141,6 +168,7 @@ jobs:
           compile=${{ steps.compile.outcome }}
           daedbuild=${{ steps.daedbuild.outcome }}
           inspect=${{ steps.inspect.outcome }}
+          daedsource=${{ steps.daedsource.outcome }}
           EOF
           if [ -d openwrt/bin/targets/qualcommax/ipq60xx ]; then
             bash scripts/collect_output.sh \
@@ -164,6 +192,9 @@ jobs:
           if [ -d daed-provenance ]; then
             cp -a daed-provenance "$OUTPUT/diagnostics/daed-provenance"
           fi
+          if [ -d daed-source-provenance ]; then
+            cp -a daed-source-provenance "$OUTPUT/diagnostics/daed-source-provenance"
+          fi
       - uses: actions/upload-artifact@v6
         if: always()
         with:
@@ -180,6 +211,7 @@ jobs:
           echo "compile=${{ steps.compile.outcome }}"
           echo "daedbuild=${{ steps.daedbuild.outcome }}"
           echo "inspect=${{ steps.inspect.outcome }}"
+          echo "daedsource=${{ steps.daedsource.outcome }}"
           if [ "${{ steps.validate.outcome }}" != success ]; then
             echo "Source validation already reported the primary failure."
             exit 0
@@ -188,6 +220,7 @@ jobs:
             echo "OpenWrt configuration already reported the primary failure. Download the diagnostic Artifact."
             exit 0
           fi
+          test "${{ steps.daedsource.outcome }}" = success
           test "${{ steps.compile.outcome }}" = success
           test "${{ steps.daedbuild.outcome }}" = success
           test "${{ steps.inspect.outcome }}" = success

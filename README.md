@@ -62,6 +62,18 @@ sysupgrade -n /tmp/athena-v19-squashfs-sysupgrade.bin
 local_tcp_sockops: program of this type cannot use helper bpf_get_current_task#35
 ```
 
+锁定的 DAED 包不再直接依赖上游 `daed-src` Release 资产。CI 会读取锁定仓库中的 `ci/pins.env`，从不可变的 DAED、Wing、Core、Outbound 和 quic-go 提交重新组装源码，在编译前构建并嵌入已修补的 Web 页面，然后把源码包放入 OpenWrt `dl/`。`package/daed/download` 会先单独校验该文件，只有通过后才开始完整固件编译。
+
+组装来源和实际 SHA-256 会写入 Artifact：
+
+```text
+diagnostics/daed-source-provenance/
+├── pins.env
+├── archive.json
+├── archive.sha256
+└── openwrt-download-check.log
+```
+
 云端编译成功仍不能替代真机测试。DAED 启动后必须确认进程和 API 均可达，且日志不再出现上述 FATAL。
 
 ## 首次配置

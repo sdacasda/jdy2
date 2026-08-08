@@ -1,5 +1,16 @@
 # Changelog
 
+## v19.0.0-rc1 DAED 源码耐久性修复
+
+- 修复第 12 次构建中 `daed-src-2026.07.26-ecbc5c99d632.tar.gz` 上游 Release 资产返回 404，导致完整编译结束后无 initramfs 的问题。
+- CI 现在从上游 `ci/pins.env` 中的不可变组件提交本地组装 DAED 源码，不再依赖只保留少量历史文件的 Release 下载地址。
+- 使用 Go 1.26.0、Node.js 24 和锁定的 pnpm workspace 构建 DAED Web，并在前端编译前应用同源 `/athena-daed/graphql` 修补。
+- 组装包采用规范化时间、排序、属主和 `gzip -n`，实际 SHA-256 自动写入本次 OpenWrt 包定义。
+- 完整固件编译前单独执行 `package/daed/download`，先验证本地源码包存在且校验通过，避免再次浪费数小时。
+- 缓存归档必须匹配全部组件 pins、assembly manifest、SHA-256 和已编译的同源 Web 端点，否则自动重建。
+- DAED 下载预检成功后立即保存源码缓存，即使后续固件编译失败也能用于下一次重试。
+- Artifact 新增 `diagnostics/daed-source-provenance/`，保存组件 pins、源码包哈希和 OpenWrt 下载验证日志。
+
 ## v19.0.0-rc1 Web/DAED 修复
 
 - 修复 Nginx 与 uHTTPd 同时占用主 Web 端口的问题：Nginx 独占 80/443，uHTTPd 只提供 `192.168.50.1:8080` 恢复入口。
