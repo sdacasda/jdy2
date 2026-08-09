@@ -11,6 +11,8 @@ import sys
 import tarfile
 from pathlib import Path, PurePosixPath
 
+from install_daed_web import inspect_archive
+
 
 ENDPOINT = b"/athena-daed/graphql"
 MAX_WEB_ASSET_SIZE = 32 * 1024 * 1024
@@ -95,15 +97,26 @@ def verify_archive_contents(archive: Path) -> str:
         raise RuntimeError(f"invalid DAED source cache archive: {exc}") from exc
 
 
-def expected_record(archive: Path, cache_id: str, pins: dict[str, str], root: str) -> dict:
+def expected_record(
+    archive: Path,
+    cache_id: str,
+    pins: dict[str, str],
+    root: str,
+    static_web: dict[str, object],
+) -> dict:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "cache_id": cache_id,
         "source": archive.name,
         "source_root": root,
         "sha256": sha256_file(archive),
         "size": archive.stat().st_size,
         "pins": pins,
+        "static_web": {
+            "file_count": static_web["file_count"],
+            "tree_sha256": static_web["tree_sha256"],
+            "files": static_web["files"],
+        },
     }
 
 
@@ -142,7 +155,13 @@ def main() -> int:
     try:
         pins = parse_pins(args.pin)
         root = verify_archive_contents(args.archive)
-        expected = expected_record(args.archive, args.cache_id, pins, root)
+        static_inspection = inspect_archive(args.archive)
+        static_web = static_inspection["record"]
+        if not isinstance(static_web, dict) or static_web.get("root") != root:
+            raise RuntimeError("static Web source root does not match the DAED archive")
+        expected = expected_record(
+            args.archive, args.cache_id, pins, root, static_web
+        )
         if args.write:
             write_manifest(args.manifest, expected)
         verify_manifest(args.manifest, expected)

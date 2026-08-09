@@ -165,6 +165,18 @@ tar -xOzf "$ARCHIVE" "$OUT_NAME/apps/web/src/constants/default.ts" \
 	exit 1
 }
 
+STATIC_WEB_DEST="$TOPDIR/package/custom/luci-app-athena/root/www/athena-daed"
+STATIC_WEB_PACKAGE_MANIFEST="$TOPDIR/package/custom/luci-app-athena/root/usr/share/athena/daed-static-web.json"
+STATIC_WEB_PROVENANCE="$PROVENANCE/static-web.json"
+python3 "$PROJECT_ROOT/scripts/install_daed_web.py" \
+	--archive "$ARCHIVE" \
+	--destination "$STATIC_WEB_DEST" \
+	--provenance "$STATIC_WEB_PACKAGE_MANIFEST"
+test -s "$STATIC_WEB_DEST/index.html"
+test -s "$STATIC_WEB_PACKAGE_MANIFEST"
+cp "$STATIC_WEB_PACKAGE_MANIFEST" "$STATIC_WEB_PROVENANCE"
+test -s "$STATIC_WEB_PROVENANCE"
+
 python3 "$PROJECT_ROOT/scripts/install_daed_source.py" \
 	--makefile "$MAKEFILE" \
 	--archive "$ARCHIVE" \

@@ -1,5 +1,29 @@
-import pathlib, subprocess, sys, unittest
+import pathlib, re, shutil, subprocess, sys, tempfile, unittest
 ROOT = pathlib.Path(__file__).parents[1]
+
+
+def validate_web(root):
+    return subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts/verify_web_config.py"),
+            "--root",
+            str(root),
+        ],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+
+
+def copy_web_fixture(root):
+    shutil.copytree(
+        ROOT / "packages/luci-app-athena",
+        root / "packages/luci-app-athena",
+    )
+
+
 class WebTests(unittest.TestCase):
     def test_validator(self):
         subprocess.run([sys.executable, str(ROOT/"scripts/verify_web_config.py"), "--root", str(ROOT)], check=True)
@@ -12,6 +36,36 @@ class WebTests(unittest.TestCase):
         )
         self.assertIn("location /athena-daed/", locations)
         self.assertIn("location = /athena-daed/graphql", locations)
+
+    def test_daed_static_ui_and_graphql_have_separate_responsibilities(self):
+        locations = (
+            ROOT
+            / "packages/luci-app-athena/root/etc/nginx/conf.d/athena-daed.locations"
+        ).read_text(encoding="utf-8")
+        graphql = re.search(
+            r"location\s+=\s+/athena-daed/graphql\s*\{([^}]*)\}",
+            locations,
+            re.S,
+        )
+        static_ui = re.search(
+            r"location\s+/athena-daed/\s*\{([^}]*)\}",
+            locations,
+            re.S,
+        )
+        self.assertIsNotNone(graphql)
+        self.assertIsNotNone(static_ui)
+        self.assertIn(
+            "proxy_pass http://127.0.0.1:2023/graphql;", graphql.group(1)
+        )
+        self.assertIn("proxy_buffering off;", graphql.group(1))
+        self.assertIn("proxy_set_header Upgrade $http_upgrade;", graphql.group(1))
+        self.assertNotIn("root /www;", graphql.group(1))
+        self.assertNotIn("try_files", graphql.group(1))
+        self.assertIn("root /www;", static_ui.group(1))
+        self.assertIn(
+            "try_files $uri $uri/ /athena-daed/index.html;", static_ui.group(1)
+        )
+        self.assertNotIn("proxy_pass", static_ui.group(1))
 
     def test_firstboot_assigns_each_web_port_once(self):
         defaults = (
@@ -36,5 +90,95 @@ class WebTests(unittest.TestCase):
             "chart.js",
         ):
             self.assertIn(required, validator)
+
+    def test_rejects_whole_daed_site_proxy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            copy_web_fixture(root)
+            config = root / "packages/luci-app-athena/root/etc/nginx/conf.d/athena-daed.locations"
+            text = config.read_text(encoding="utf-8").replace(
+                "root /www;\n    try_files $uri $uri/ /athena-daed/index.html;",
+                "proxy_pass http://127.0.0.1:2023/;",
+            )
+            config.write_text(text, encoding="utf-8")
+
+            result = validate_web(root)
+
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+
+    def test_rejects_graphql_proxy_not_loopback(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            copy_web_fixture(root)
+            config = root / "packages/luci-app-athena/root/etc/nginx/conf.d/athena-daed.locations"
+            text = config.read_text(encoding="utf-8").replace(
+                "http://127.0.0.1:2023/graphql",
+                "http://192.168.50.1:2023/graphql",
+            )
+            config.write_text(text, encoding="utf-8")
+
+            result = validate_web(root)
+
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+
+    def test_rejects_conditional_daed_iframe(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            copy_web_fixture(root)
+            panel = root / "packages/luci-app-athena/htdocs/luci-static/resources/view/athena/daed-panel.js"
+            text = panel.read_text(encoding="utf-8").replace(
+                "\t\tpage.appendChild(E('iframe', {",
+                "\t\tif (s.daed_running)\n\t\t\tpage.appendChild(E('iframe', {",
+            )
+            panel.write_text(text, encoding="utf-8")
+
+            result = validate_web(root)
+
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+
+    def test_rejects_browser_visible_port_2023(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            copy_web_fixture(root)
+            panel = root / "packages/luci-app-athena/htdocs/luci-static/resources/view/athena/daed-panel.js"
+            text = panel.read_text(encoding="utf-8").replace(
+                "src: '/athena-daed/'",
+                "src: 'http://192.168.50.1:2023/'",
+            )
+            panel.write_text(text, encoding="utf-8")
+
+            result = validate_web(root)
+
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+
+    def test_rejects_daed_enabled_by_default(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            copy_web_fixture(root)
+            defaults = root / "packages/luci-app-athena/root/etc/uci-defaults/95-athena-web"
+            text = defaults.read_text(encoding="utf-8").replace(
+                "set daed.config.enabled='0'",
+                "set daed.config.enabled='1'",
+            )
+            defaults.write_text(text, encoding="utf-8")
+
+            result = validate_web(root)
+
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+
+    def test_rejects_missing_recovery_listener(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            copy_web_fixture(root)
+            defaults = root / "packages/luci-app-athena/root/etc/uci-defaults/95-athena-web"
+            text = defaults.read_text(encoding="utf-8").replace(
+                "192.168.50.1:8080",
+                "192.168.50.1:8081",
+            )
+            defaults.write_text(text, encoding="utf-8")
+
+            result = validate_web(root)
+
+            self.assertNotEqual(result.returncode, 0, result.stdout)
 if __name__ == "__main__":
     unittest.main()

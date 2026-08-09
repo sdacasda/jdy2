@@ -74,7 +74,7 @@ jobs:
         id: daedcache
         with:
           path: .cache/daed-source
-          key: daed-source-${{ runner.os }}-${{ hashFiles('SOURCES.lock.json', 'scripts/assemble_daed_source.sh', 'scripts/install_daed_source.py', 'scripts/verify_daed_source_cache.py', 'scripts/patch_daed_web.py') }}
+          key: daed-source-${{ runner.os }}-${{ hashFiles('SOURCES.lock.json', 'patches/daed/**', 'scripts/assemble_daed_source.sh', 'scripts/install_daed_source.py', 'scripts/install_daed_web.py', 'scripts/verify_daed_source_cache.py', 'scripts/patch_daed_web.py') }}
       - name: Clone immutable LiBwrt source
         run: |
           REPO="$(jq -r '.libwrt.repository' SOURCES.lock.json)"
@@ -125,6 +125,10 @@ jobs:
           mkdir -p daed-source-provenance
           bash scripts/assemble_daed_source.sh openwrt 2>&1 \
             | tee daed-source-provenance/assembly.log
+          test -s openwrt/package/custom/luci-app-athena/root/www/athena-daed/index.html
+          test -s openwrt/package/custom/luci-app-athena/root/usr/share/athena/daed-static-web.json
+          test -s daed-source-provenance/static-web.json
+          python3 scripts/verify_web_config.py --root .
           make -C openwrt package/daed/download V=s 2>&1 \
             | tee daed-source-provenance/openwrt-download-check.log
       - uses: actions/cache/save@v5
@@ -133,7 +137,7 @@ jobs:
         continue-on-error: true
         with:
           path: .cache/daed-source
-          key: daed-source-${{ runner.os }}-${{ hashFiles('SOURCES.lock.json', 'scripts/assemble_daed_source.sh', 'scripts/install_daed_source.py', 'scripts/verify_daed_source_cache.py', 'scripts/patch_daed_web.py') }}
+          key: daed-source-${{ runner.os }}-${{ hashFiles('SOURCES.lock.json', 'patches/daed/**', 'scripts/assemble_daed_source.sh', 'scripts/install_daed_source.py', 'scripts/install_daed_web.py', 'scripts/verify_daed_source_cache.py', 'scripts/patch_daed_web.py') }}
       - name: Build both images
         id: compile
         continue-on-error: true

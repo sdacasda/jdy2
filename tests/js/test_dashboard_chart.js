@@ -9,7 +9,28 @@ const sourcePath = path.join(
   'packages/luci-app-athena/htdocs/luci-static/resources/athena/chart.js'
 );
 const source = fs.readFileSync(sourcePath, 'utf8');
-const chart = Function(source)();
+
+class LuCIClass {}
+
+LuCIClass.extend = function(members) {
+  class Derived extends LuCIClass {}
+  Object.assign(Derived.prototype, members);
+  return Derived;
+};
+
+const ChartClass = Function('L', source)({ Class: LuCIClass });
+assert.strictEqual(typeof ChartClass, 'function');
+assert.ok(ChartClass.prototype instanceof LuCIClass);
+
+const chart = new ChartClass();
+for (const method of [
+  'appendSample',
+  'deltaRate',
+  'cpuPercent',
+  'normalizeSeries',
+  'polylineSegments'
+])
+  assert.strictEqual(typeof chart[method], 'function');
 
 let history = chart.appendSample([], { value: 1 }, 200);
 assert.deepStrictEqual(history, [{ value: 1 }]);

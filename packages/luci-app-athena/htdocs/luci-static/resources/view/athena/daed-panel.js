@@ -45,7 +45,6 @@ return view.extend({
 	},
 
 	render: function(s) {
-		var ready = s.daed_running && s.daed_api_reachable;
 		var page = E('div', { class: 'athena-daed-page' }, [
 			E('style', {}, [
 				'.athena-daed-page{display:grid;gap:16px}',
@@ -65,30 +64,30 @@ return view.extend({
 			])
 		]);
 
-		if (ready) {
-			page.appendChild(E('div', { class: 'athena-daed-actions' }, [
-				E('button', { class: 'btn cbi-button-negative', click: this.handleStop.bind(this) }, _('停止 DAED')),
-				E('button', { class: 'btn cbi-button-neutral', click: this.handleRefresh.bind(this) }, _('重新检测'))
-			]));
-			page.appendChild(E('iframe', {
-				src: '/athena-daed/',
-				class: 'athena-daed-frame',
-				sandbox: 'allow-same-origin allow-scripts allow-forms allow-downloads allow-popups',
-				referrerpolicy: 'same-origin',
-				title: 'DAED'
-			}));
-		} else {
+		page.appendChild(E('div', { class: 'athena-daed-actions' }, [
+			s.daed_running
+				? E('button', { class: 'btn cbi-button-negative', click: this.handleStop.bind(this) }, _('停止 DAED'))
+				: E('button', { class: 'btn cbi-button-positive important', click: this.handleStart.bind(this) }, _('启动 DAED')),
+			E('button', { class: 'btn cbi-button-neutral', click: this.handleRefresh.bind(this) }, _('重新检测'))
+		]));
+
+		if (!s.daed_running || !s.daed_api_reachable) {
 			page.appendChild(E('div', { class: 'athena-daed-card' }, [
-				E('h3', {}, _('DAED 尚未就绪')),
+				E('h3', {}, _('DAED 后端尚未就绪')),
 				E('p', {}, errorMessage(s.daed_error_class)),
 				E('p', {}, [ _('恢复入口：'), E('a', { href: s.recovery_url || '#', target: '_blank', rel: 'noreferrer' }, s.recovery_url || '-') ]),
-				E('code', {}, 'athena-health --verbose'),
-				E('div', { class: 'athena-daed-actions' }, [
-					E('button', { class: 'btn cbi-button-positive important', click: this.handleStart.bind(this) }, s.daed_running ? _('重新启动') : _('启动 DAED')),
-					E('button', { class: 'btn cbi-button-neutral', click: this.handleRefresh.bind(this) }, _('重新检测'))
-				])
+				E('code', {}, 'athena-health --verbose')
 			]));
 		}
+
+		page.appendChild(E('iframe', {
+			src: '/athena-daed/',
+			class: 'athena-daed-frame',
+			sandbox: 'allow-same-origin allow-scripts allow-forms allow-modals allow-downloads allow-popups',
+			allow: 'clipboard-read; clipboard-write',
+			referrerpolicy: 'same-origin',
+			title: 'DAED'
+		}));
 		return page;
 	},
 

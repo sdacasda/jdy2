@@ -2,6 +2,16 @@
 
 日期：2026-08-09
 
+## 本次交付：主页与完整 DAED 原生 UI
+
+- 主页错误的根因是 `athena/chart.js` 返回普通对象，而 LuCI 的 `'require athena.chart'` 需要可实例化的类。模块现返回标准 `L.Class` 子类，现有采样、CPU、速率和 SVG 计算 API 保持不变。
+- `/athena-daed/` 现在由 Nginx 从 `/www/athena-daed/` 静态提供完整原生 DAED SPA；该目录来自本次固定 DAED 源码归档中的 `apps/web/dist`，不是独立下载或维护的第二套 UI。
+- `/athena-daed/graphql` 是唯一代理到 `127.0.0.1:2023/graphql` 的路径。静态 UI 不依赖 DAED 进程提供 HTML/CSS/JavaScript，直接访问 `192.168.50.1:2023` 仍应被拒绝。
+- LuCI 面板始终显示原生 DAED iframe。DAED 未启动、配置错误或 eBPF 与内核不兼容时，状态条会提示后端不可用，但完整 UI 仍保留。
+- 安装器安全拒绝路径穿越、链接、缺失引用、浏览器可见 2023 和非同源 GraphQL；缓存、CI 和固件检查继续验证整棵静态资源树。
+
+这项修改明确不解决内核自身的 eBPF helper 兼容性；它保证后端失败不会连带让 DAED 管理 UI 消失。
+
 ## 第 13 次构建结论
 
 第 13 次运行已证明固定来源 DAED 的本地组装、OpenWrt 双镜像编译和 DAED provenance 校验全部成功。Artifact 中同时存在 initramfs 与 sysupgrade，内核为 5,561,400 字节，距离 6 MiB 上限仍有 730,056 字节；包清单、禁用包和仪表盘文件检查也全部通过。
@@ -25,14 +35,14 @@
 - Nginx 独占 80/443，提供 LuCI、Argon 与 DAED 同源入口。
 - uHTTPd 不再占用主 Web 端口，只绑定 `192.168.50.1:8080` 作为 LAN 恢复入口。
 - 删除不能在 Nginx `http {}` 上下文直接加载的 `athena-daed.conf`，改为服务器上下文加载的 `athena-daed.locations`。
-- DAED 只监听 `127.0.0.1:2023`；浏览器使用 `/athena-daed/` 与 `/athena-daed/graphql`。
-- 构建时精确修补 DAED 前端默认 GraphQL 地址；上游源码结构变化时立即失败，避免生成半损坏页面。
+- DAED 只监听 `127.0.0.1:2023`；浏览器静态加载 `/athena-daed/`，只有 `/athena-daed/graphql` 访问回环后端。
+- 构建时精确修补并提取 DAED 原生前端；上游源码结构变化、资源缺失或摘要变化时立即失败，避免生成半损坏页面。
 
 ## DAED 状态与恢复
 
 - DAED 面板区分“开机启用、进程运行、API 可用”三种状态。
 - eBPF、配置、内存和不可用错误会分类显示，敏感日志不会返回浏览器。
-- 只有进程与 API 均可用时才加载 DAED 原生页面。
+- 无论进程与 API 状态如何都加载 DAED 原生页面；后端不可用时保留状态提示。
 - 新增启动、停止、重试操作和相应 RPC 权限。
 - `athena-health` 增加 Nginx、端口所有权、8080 恢复入口、DAED 进程/API 检查。
 - `athena-rollback --component web` 可仅恢复 Web 与服务配置，不修改 `wing.db`。

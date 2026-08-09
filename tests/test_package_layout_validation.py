@@ -23,7 +23,14 @@ def write_minimum_layout(root: Path, runtime_makefile: str, luci_makefile: str) 
         "packages/athena-runtime/files/usr/bin/athena-setup": "#!/bin/sh\n",
         "packages/athena-runtime/files/usr/bin/athena-iot": "#!/bin/sh\n",
         "packages/luci-app-athena/root/etc/nginx/conf.d/athena-daed.locations": (
-            "location /athena-daed/ {}\n"
+            "location /athena-daed/ { root /www; }\n"
+        ),
+        "packages/luci-app-athena/htdocs/luci-static/resources/view/athena/daed-panel.js": (
+            "page.appendChild(E('iframe', { src: '/athena-daed/' }));\n"
+        ),
+        "scripts/install_daed_web.py": "#!/usr/bin/env python3\n",
+        "scripts/assemble_daed_source.sh": (
+            "#!/bin/sh\npython3 scripts/install_daed_web.py --archive source.tar.gz\n"
         ),
         "packages/athena-runtime/files/usr/lib/athena/dashboard.sh": "#!/bin/sh\n",
         "packages/luci-app-athena/htdocs/luci-static/resources/athena/chart.js": (
@@ -157,6 +164,39 @@ class PackageLayoutValidationTests(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("must use base BusyBox tar/gzip applets", result.stdout)
+
+    def test_rejects_missing_static_web_installer(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_minimum_layout(
+                root,
+                "$(eval $(call BuildPackage,athena-runtime))\n",
+                "# call BuildPackage - OpenWrt buildroot signature\n"
+                "include $(TOPDIR)/feeds/luci/luci.mk\n",
+            )
+            (root / "scripts/install_daed_web.py").unlink()
+
+            result = validate(root)
+
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+            self.assertIn("scripts/install_daed_web.py", result.stdout)
+
+    def test_rejects_missing_assembly_install_call(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_minimum_layout(
+                root,
+                "$(eval $(call BuildPackage,athena-runtime))\n",
+                "# call BuildPackage - OpenWrt buildroot signature\n"
+                "include $(TOPDIR)/feeds/luci/luci.mk\n",
+            )
+            assembly = root / "scripts/assemble_daed_source.sh"
+            assembly.write_text("#!/bin/sh\n", encoding="utf-8")
+
+            result = validate(root)
+
+            self.assertNotEqual(result.returncode, 0, result.stdout)
+            self.assertIn("install_daed_web.py", result.stdout)
 
 
 if __name__ == "__main__":

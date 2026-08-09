@@ -86,4 +86,23 @@ class WorkflowTests(unittest.TestCase):
   self.assertLess(assemble,save)
   self.assertLess(save,compile_step)
   self.assertIn("steps.daedcache.outputs.cache-hit != 'true'",t)
+
+ def test_daed_cache_key_includes_static_web_installer(self):
+  t=(ROOT/".github/workflows/build-athena-v19.yml").read_text(encoding="utf-8")
+  keys = [line for line in t.splitlines() if "key: daed-source-" in line]
+  self.assertGreaterEqual(len(keys), 2)
+  for key in keys:
+   self.assertIn("scripts/install_daed_web.py", key)
+
+ def test_daed_static_ui_is_verified_before_long_firmware_build(self):
+  t=(ROOT/".github/workflows/build-athena-v19.yml").read_text(encoding="utf-8")
+  assemble=t.index("bash scripts/assemble_daed_source.sh openwrt")
+  staged_index=t.index("root/www/athena-daed/index.html")
+  package_manifest=t.index("root/usr/share/athena/daed-static-web.json")
+  provenance=t.index("daed-source-provenance/static-web.json")
+  verify_web=t.index("python3 scripts/verify_web_config.py --root .", assemble)
+  compile_step=t.index("name: Build both images")
+  for check in (staged_index, package_manifest, provenance, verify_web):
+   self.assertLess(assemble, check)
+   self.assertLess(check, compile_step)
 if __name__=="__main__": unittest.main()

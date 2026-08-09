@@ -15,17 +15,35 @@ ROOT = Path(__file__).parents[1]
 
 
 class DaedSourceAssemblyTests(unittest.TestCase):
-    def _write_cache_archive(self, archive: Path, *, embedded_endpoint: bool = True):
+    def _write_cache_archive(
+        self,
+        archive: Path,
+        *,
+        embedded_endpoint: bool = True,
+        static_endpoint: bytes = b"/athena-daed/graphql",
+        include_static_css: bool = True,
+    ):
         source_endpoint = b"/athena-daed/graphql"
         embedded_value = source_endpoint if embedded_endpoint else b"/graphql"
         files = {
             "daed-2026.07.26/wing/go.mod": b"module example.invalid/wing\n",
             "daed-2026.07.26/apps/web/src/constants/default.ts": source_endpoint,
+            "daed-2026.07.26/apps/web/dist/index.html": (
+                b'<link rel="icon" href="./logo.webp">'
+                b'<script type="module" src="./assets/app.js"></script>'
+                b'<link rel="stylesheet" href="./assets/app.css">'
+            ),
+            "daed-2026.07.26/apps/web/dist/logo.webp": b"RIFF-logo",
+            "daed-2026.07.26/apps/web/dist/assets/app.js": (
+                b"const endpoint='" + static_endpoint + b"';"
+            ),
             "daed-2026.07.26/wing/webrender/web/index.html": b"<html></html>\n",
             "daed-2026.07.26/wing/webrender/web/assets/app.js.gz": gzip.compress(
                 b"const endpoint='" + embedded_value + b"';", mtime=0
             ),
         }
+        if include_static_css:
+            files["daed-2026.07.26/apps/web/dist/assets/app.css"] = b"body{}"
         with tarfile.open(archive, "w:gz") as bundle:
             for name, payload in files.items():
                 info = tarfile.TarInfo(name)
@@ -58,6 +76,15 @@ class DaedSourceAssemblyTests(unittest.TestCase):
             )
             self.assertEqual(verified.returncode, 0, verified.stdout + verified.stderr)
 
+            record = json.loads(manifest.read_text(encoding="utf-8"))
+            self.assertEqual(record["schema_version"], 2)
+            self.assertEqual(record["static_web"]["file_count"], 4)
+            self.assertEqual(len(record["static_web"]["tree_sha256"]), 64)
+            self.assertEqual(
+                [entry["path"] for entry in record["static_web"]["files"]],
+                sorted(entry["path"] for entry in record["static_web"]["files"]),
+            )
+
             archive.write_bytes(archive.read_bytes() + b"corrupt")
             rejected = subprocess.run(
                 command, text=True, capture_output=True, check=False
@@ -87,6 +114,139 @@ class DaedSourceAssemblyTests(unittest.TestCase):
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("embedded Web bundle", result.stderr)
+
+    def test_cache_verifier_rejects_static_web_tree_hash_mismatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = root / "daed-src-test.tar.gz"
+            manifest = root / "assembly-manifest.json"
+            self._write_cache_archive(archive)
+            command = [
+                sys.executable,
+                str(ROOT / "scripts/verify_daed_source_cache.py"),
+                "--archive", str(archive),
+                "--manifest", str(manifest),
+                "--cache-id", "cache-v1",
+                "--pin", "DAED_COMMIT=" + "a" * 40,
+            ]
+            written = subprocess.run(
+                command + ["--write"], text=True, capture_output=True, check=False
+            )
+            self.assertEqual(written.returncode, 0, written.stdout + written.stderr)
+            record = json.loads(manifest.read_text(encoding="utf-8"))
+            record["static_web"]["tree_sha256"] = "0" * 64
+            manifest.write_text(json.dumps(record), encoding="utf-8")
+
+            rejected = subprocess.run(
+                command, text=True, capture_output=True, check=False
+            )
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("manifest does not match", rejected.stderr)
+
+    def test_cache_verifier_rejects_static_web_file_list_mismatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = root / "daed-src-test.tar.gz"
+            manifest = root / "assembly-manifest.json"
+            self._write_cache_archive(archive)
+            command = [
+                sys.executable,
+                str(ROOT / "scripts/verify_daed_source_cache.py"),
+                "--archive", str(archive),
+                "--manifest", str(manifest),
+                "--cache-id", "cache-v1",
+                "--pin", "DAED_COMMIT=" + "a" * 40,
+            ]
+            written = subprocess.run(
+                command + ["--write"], text=True, capture_output=True, check=False
+            )
+            self.assertEqual(written.returncode, 0, written.stdout + written.stderr)
+            record = json.loads(manifest.read_text(encoding="utf-8"))
+            record["static_web"]["files"].pop()
+            manifest.write_text(json.dumps(record), encoding="utf-8")
+
+            rejected = subprocess.run(
+                command, text=True, capture_output=True, check=False
+            )
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("manifest does not match", rejected.stderr)
+
+    def test_cache_verifier_rejects_missing_static_web_asset(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = root / "daed-src-test.tar.gz"
+            manifest = root / "assembly-manifest.json"
+            self._write_cache_archive(archive, include_static_css=False)
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts/verify_daed_source_cache.py"),
+                    "--archive", str(archive),
+                    "--manifest", str(manifest),
+                    "--cache-id", "cache-v1",
+                    "--pin", "DAED_COMMIT=" + "a" * 40,
+                    "--write",
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("referenced asset is missing", result.stderr)
+
+    def test_cache_verifier_rejects_static_web_browser_port(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = root / "daed-src-test.tar.gz"
+            manifest = root / "assembly-manifest.json"
+            self._write_cache_archive(
+                archive,
+                static_endpoint=b"http://127.0.0.1:2023/graphql",
+            )
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts/verify_daed_source_cache.py"),
+                    "--archive", str(archive),
+                    "--manifest", str(manifest),
+                    "--cache-id", "cache-v1",
+                    "--pin", "DAED_COMMIT=" + "a" * 40,
+                    "--write",
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("browser-visible DAED port", result.stderr)
+
+    def test_schema_one_manifest_is_not_reused(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = root / "daed-src-test.tar.gz"
+            manifest = root / "assembly-manifest.json"
+            self._write_cache_archive(archive)
+            command = [
+                sys.executable,
+                str(ROOT / "scripts/verify_daed_source_cache.py"),
+                "--archive", str(archive),
+                "--manifest", str(manifest),
+                "--cache-id", "cache-v1",
+                "--pin", "DAED_COMMIT=" + "a" * 40,
+            ]
+            written = subprocess.run(
+                command + ["--write"], text=True, capture_output=True, check=False
+            )
+            self.assertEqual(written.returncode, 0, written.stdout + written.stderr)
+            record = json.loads(manifest.read_text(encoding="utf-8"))
+            record["schema_version"] = 1
+            manifest.write_text(json.dumps(record), encoding="utf-8")
+
+            rejected = subprocess.run(
+                command, text=True, capture_output=True, check=False
+            )
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("manifest does not match", rejected.stderr)
 
     def test_installer_copies_local_archive_and_pins_its_hash(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -143,6 +303,14 @@ class DaedSourceAssemblyTests(unittest.TestCase):
         self.assertIn("gzip -n", script)
         self.assertIn("assembly-manifest.json", script)
         self.assertIn("verify_daed_source_cache.py", script)
+        self.assertIn("scripts/install_daed_web.py", script)
+        self.assertIn("root/www/athena-daed", script)
+        self.assertIn("root/usr/share/athena/daed-static-web.json", script)
+        self.assertIn("static-web.json", script)
+        self.assertLess(
+            script.index("scripts/install_daed_web.py"),
+            script.index("scripts/install_daed_source.py"),
+        )
         self.assertIsNone(
             re.search(r"tar -xOzf[^\n]*\n\s*\| grep -q", script),
             "pipefail would treat tar SIGPIPE as an archive validation failure",

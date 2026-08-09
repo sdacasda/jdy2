@@ -106,7 +106,7 @@ function polylineSegments(values, width, height) {
 	return segments;
 }
 
-return Object.freeze({
+return L.Class.extend({
 	appendSample: appendSample,
 	deltaRate: deltaRate,
 	cpuPercent: cpuPercent,

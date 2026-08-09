@@ -37,9 +37,24 @@ def main():
       "packages/athena-runtime/files/usr/bin/athena-setup",
       "packages/athena-runtime/files/usr/bin/athena-iot",
       "packages/luci-app-athena/root/etc/nginx/conf.d/athena-daed.locations",
+      "packages/luci-app-athena/htdocs/luci-static/resources/view/athena/daed-panel.js",
+      "scripts/install_daed_web.py",
+      "scripts/assemble_daed_source.sh",
       *DASHBOARD_FILES]
     missing=[p for p in required if not (root/p).is_file()]
     if missing: raise SystemExit("missing: "+", ".join(missing))
+
+    assembly=(root/"scripts/assemble_daed_source.sh").read_text(encoding="utf-8")
+    if "scripts/install_daed_web.py" not in assembly:
+        raise SystemExit("assemble_daed_source.sh must invoke install_daed_web.py")
+
+    locations=(root/"packages/luci-app-athena/root/etc/nginx/conf.d/athena-daed.locations").read_text(encoding="utf-8")
+    if "location /athena-daed/" not in locations or "root /www;" not in locations:
+        raise SystemExit("DAED static UI location is missing")
+
+    panel=(root/"packages/luci-app-athena/htdocs/luci-static/resources/view/athena/daed-panel.js").read_text(encoding="utf-8")
+    if "src: '/athena-daed/'" not in panel:
+        raise SystemExit("DAED panel iframe source is missing")
 
     runtime=(root/"packages/athena-runtime/Makefile").read_text(encoding="utf-8")
     luci=(root/"packages/luci-app-athena/Makefile").read_text(encoding="utf-8")

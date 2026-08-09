@@ -1,5 +1,6 @@
 from pathlib import Path
 import gzip
+import hashlib
 import json
 import shutil
 import subprocess
@@ -26,6 +27,30 @@ WEB_ROOTFS_FILES = (
     "usr/share/luci/menu.d/luci-app-athena.json",
     "usr/bin/daed",
 )
+
+
+def static_web_record(files):
+    entries = []
+    digest = hashlib.sha256()
+    for relative in sorted(files):
+        payload = files[relative]
+        sha256 = hashlib.sha256(payload).hexdigest()
+        entries.append(
+            {"path": relative, "size": len(payload), "sha256": sha256}
+        )
+        digest.update(relative.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(sha256.encode("ascii"))
+        digest.update(b"\n")
+    return {
+        "schema": 1,
+        "archive": "daed-test.tar.gz",
+        "archive_sha256": "0" * 64,
+        "root": "daed-test",
+        "file_count": len(entries),
+        "tree_sha256": digest.hexdigest(),
+        "files": entries,
+    }
 
 
 class FirmwareInspectionTests(unittest.TestCase):
@@ -59,7 +84,16 @@ class FirmwareInspectionTests(unittest.TestCase):
         persistent = rootfs / "jdcloud_re-cs-02-uImage.itb"
         persistent.write_bytes(b"persistent-kernel")
         web_contents = {
-            "etc/nginx/conf.d/athena-daed.locations": "location /athena-daed/ {}\nlocation = /athena-daed/graphql {}\n",
+            "etc/nginx/conf.d/athena-daed.locations": (
+                "location = /athena-daed/graphql {\n"
+                "    proxy_pass http://127.0.0.1:2023/graphql;\n"
+                "    proxy_buffering off;\n"
+                "}\n"
+                "location /athena-daed/ {\n"
+                "    root /www;\n"
+                "    try_files $uri $uri/ /athena-daed/index.html;\n"
+                "}\n"
+            ),
             "etc/uci-defaults/95-athena-web": "delete uhttpd.main.listen_http\ndelete uhttpd.main.listen_https\nset daed.config.listen_addr='127.0.0.1:2023'\nset daed.config.enabled='0'\n",
             "www/athena-recovery.html": "<!doctype html><title>Athena recovery</title>\n",
             "www/luci-static/resources/view/athena/daed-panel.js": "src: '/athena-daed/'\n",
@@ -72,6 +106,26 @@ class FirmwareInspectionTests(unittest.TestCase):
         daed = rootfs / "usr/bin/daed"
         daed.parent.mkdir(parents=True, exist_ok=True)
         daed.write_bytes(b"ELF\x00/athena-daed/graphql\x00")
+        static_files = {
+            "index.html": (
+                b'<!doctype html><link rel="icon" href="./logo.webp">'
+                b'<link rel="stylesheet" href="./assets/index-def.css">'
+                b'<script type="module" src="./assets/index-abc.js"></script>'
+            ),
+            "logo.webp": b"WEBP-logo",
+            "assets/index-abc.js": b"const endpoint='/athena-daed/graphql';",
+            "assets/index-def.css": b"body{background:#111}",
+        }
+        for relative, payload in static_files.items():
+            path = rootfs / "www/athena-daed" / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(payload)
+        provenance = rootfs / "usr/share/athena/daed-static-web.json"
+        provenance.parent.mkdir(parents=True, exist_ok=True)
+        provenance.write_text(
+            json.dumps(static_web_record(static_files), indent=2) + "\n",
+            encoding="utf-8",
+        )
         if dashboard_files:
             for relative in DASHBOARD_ROOTFS_FILES:
                 path = rootfs / relative
@@ -117,6 +171,8 @@ class FirmwareInspectionTests(unittest.TestCase):
             self.assertEqual(report["web_integration"]["missing"], [])
             self.assertEqual(report["web_integration"]["forbidden"], [])
             self.assertEqual(report["web_integration"]["daed_endpoint"], "same-origin")
+            self.assertEqual(report["daed_static_ui"]["file_count"], 4)
+            self.assertEqual(report["daed_static_ui"]["errors"], [])
 
     def test_missing_dashboard_file_fails_when_rootfs_is_available(self):
         with tempfile.TemporaryDirectory(dir=ROOT) as directory:
@@ -257,6 +313,110 @@ class FirmwareInspectionTests(unittest.TestCase):
             report = json.loads((output / "firmware-inspection.json").read_text(encoding="utf-8"))
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("daed-loopback-default", report["web_integration"]["missing"])
+
+    def test_rejects_missing_daed_static_index(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            root = Path(directory)
+            openwrt, rootfs = self.make_fixture(root, dashboard_files=True)
+            (rootfs / "www/athena-daed/index.html").unlink()
+            output = root / "inspection"
+
+            result = self.inspect(openwrt, output)
+            report = json.loads((output / "firmware-inspection.json").read_text(encoding="utf-8"))
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("missing:index.html", report["daed_static_ui"]["errors"])
+
+    def test_rejects_missing_daed_index_reference(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            root = Path(directory)
+            openwrt, rootfs = self.make_fixture(root, dashboard_files=True)
+            index = rootfs / "www/athena-daed/index.html"
+            index.write_text(index.read_text(encoding="utf-8").replace("./logo.webp", "./missing.webp"), encoding="utf-8")
+            output = root / "inspection"
+
+            result = self.inspect(openwrt, output)
+            report = json.loads((output / "firmware-inspection.json").read_text(encoding="utf-8"))
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("missing-reference:missing.webp", report["daed_static_ui"]["errors"])
+
+    def test_rejects_missing_daed_javascript(self):
+        self._assert_static_file_rejected("assets/index-abc.js", "missing:assets/index-abc.js")
+
+    def test_rejects_missing_daed_stylesheet(self):
+        self._assert_static_file_rejected("assets/index-def.css", "missing:assets/index-def.css")
+
+    def test_rejects_missing_daed_logo(self):
+        self._assert_static_file_rejected("logo.webp", "missing:logo.webp")
+
+    def _assert_static_file_rejected(self, relative, error):
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            root = Path(directory)
+            openwrt, rootfs = self.make_fixture(root, dashboard_files=True)
+            (rootfs / "www/athena-daed" / relative).unlink()
+            output = root / "inspection"
+
+            result = self.inspect(openwrt, output)
+            report = json.loads((output / "firmware-inspection.json").read_text(encoding="utf-8"))
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(error, report["daed_static_ui"]["errors"])
+
+    def test_rejects_daed_browser_port_2023(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            root = Path(directory)
+            openwrt, rootfs = self.make_fixture(root, dashboard_files=True)
+            script = rootfs / "www/athena-daed/assets/index-abc.js"
+            script.write_text("const endpoint='http://192.168.50.1:2023/graphql';", encoding="utf-8")
+            output = root / "inspection"
+
+            result = self.inspect(openwrt, output)
+            report = json.loads((output / "firmware-inspection.json").read_text(encoding="utf-8"))
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("browser-port-2023", report["daed_static_ui"]["errors"])
+
+    def test_rejects_daed_static_location_proxy(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            root = Path(directory)
+            openwrt, rootfs = self.make_fixture(root, dashboard_files=True)
+            config = rootfs / "etc/nginx/conf.d/athena-daed.locations"
+            config.write_text(config.read_text(encoding="utf-8").replace("root /www;", "proxy_pass http://127.0.0.1:2023/;"), encoding="utf-8")
+            output = root / "inspection"
+
+            result = self.inspect(openwrt, output)
+            report = json.loads((output / "firmware-inspection.json").read_text(encoding="utf-8"))
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("daed-ui-whole-site-proxy", report["web_integration"]["forbidden"])
+
+    def test_rejects_daed_graphql_proxy_not_loopback(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            root = Path(directory)
+            openwrt, rootfs = self.make_fixture(root, dashboard_files=True)
+            config = rootfs / "etc/nginx/conf.d/athena-daed.locations"
+            config.write_text(config.read_text(encoding="utf-8").replace("127.0.0.1:2023/graphql", "192.168.50.1:2023/graphql"), encoding="utf-8")
+            output = root / "inspection"
+
+            result = self.inspect(openwrt, output)
+            report = json.loads((output / "firmware-inspection.json").read_text(encoding="utf-8"))
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("daed-graphql-loopback-proxy", report["web_integration"]["missing"])
+
+    def test_reports_daed_static_ui_hashes(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            root = Path(directory)
+            openwrt, _ = self.make_fixture(root, dashboard_files=True)
+            output = root / "inspection"
+
+            result = self.inspect(openwrt, output)
+            report = json.loads((output / "firmware-inspection.json").read_text(encoding="utf-8"))
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(len(report["daed_static_ui"]["tree_sha256"]), 64)
+            self.assertEqual(report["daed_static_ui"]["graphql_endpoint"], "/athena-daed/graphql")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import re
 from pathlib import Path
 
 
@@ -15,6 +16,12 @@ def read_utf8(path: Path) -> str:
 
 def require_exact_count(text: str, token: str, count: int, message: str) -> None:
     require(text.count(token) == count, message)
+
+
+def location_body(config: str, pattern: str, message: str) -> str:
+    match = re.search(pattern + r"\s*\{([^}]*)\}", config, re.DOTALL)
+    require(match is not None, message)
+    return match.group(1)
 
 
 def main():
@@ -39,15 +46,41 @@ def main():
     dashboard = read_utf8(dashboard_path)
     chart = read_utf8(chart_path)
     dashboard_css = read_utf8(css_path)
-    require("location /athena-daed/" in locations, "DAED UI proxy is missing")
-    require("location = /athena-daed/graphql" in locations, "DAED GraphQL proxy is missing")
-    require("proxy_pass http://127.0.0.1:2023/" in locations, "DAED UI upstream is wrong")
-    require("proxy_pass http://127.0.0.1:2023/graphql" in locations, "DAED GraphQL upstream is wrong")
-    require("proxy_http_version 1.1" in locations, "DAED proxy must use HTTP/1.1")
-    require("proxy_buffering off" in locations, "DAED proxy buffering must be disabled")
+    static_ui = location_body(
+        locations,
+        r"location\s+/athena-daed/",
+        "static DAED UI location is missing",
+    )
+    graphql = location_body(
+        locations,
+        r"location\s+=\s+/athena-daed/graphql",
+        "DAED GraphQL proxy is missing",
+    )
+    require("root /www;" in static_ui, "DAED UI must be served from /www")
+    require(
+        "try_files $uri $uri/ /athena-daed/index.html;" in static_ui,
+        "DAED UI SPA fallback is missing",
+    )
+    require("proxy_pass" not in static_ui, "DAED UI must not proxy the whole site")
+    require(
+        "proxy_pass http://127.0.0.1:2023/graphql;" in graphql,
+        "DAED GraphQL upstream must be loopback-only",
+    )
+    require("root /www" not in graphql and "try_files" not in graphql, "GraphQL route must only proxy the backend")
+    require("proxy_http_version 1.1" in graphql, "DAED GraphQL proxy must use HTTP/1.1")
+    require("proxy_buffering off" in graphql, "DAED GraphQL buffering must be disabled")
     require("0.0.0.0:2023" not in locations + defaults + panel, "DAED must remain loopback-only")
     require("192.168.50.1:8080" in defaults + panel, "recovery endpoint is missing")
-    require("/athena-daed/" in panel, "DAED panel proxy path is missing")
+    require("src: '/athena-daed/'" in panel, "DAED panel iframe path is missing")
+    require(panel.count("E('iframe'") == 1, "DAED panel must create exactly one iframe")
+    require(
+        "\n\t\tpage.appendChild(E('iframe'" in panel,
+        "DAED iframe must be appended unconditionally from the render body",
+    )
+    require(
+        not re.search(r"https?://[^'\"\s]*:2023|192\.168\.50\.1:2023", panel),
+        "browser-visible DAED port 2023 is forbidden",
+    )
     require("set daed.config.listen_addr='127.0.0.1:2023'" in defaults, "DAED loopback default is missing")
     require("set daed.config.enabled='0'" in defaults, "DAED safe default is missing")
     for option in ("uhttpd.main.listen_http", "uhttpd.main.listen_https"):

@@ -77,5 +77,20 @@ class LuciAppTests(unittest.TestCase):
         self.assertNotIn("http://", panel)
         self.assertNotIn("https://", panel)
 
+    def test_daed_panel_always_embeds_the_complete_original_ui(self):
+        panel = (
+            ROOT
+            / "packages/luci-app-athena/htdocs/luci-static/resources/view/athena/daed-panel.js"
+        ).read_text(encoding="utf-8", errors="strict")
+        self.assertIn("src: '/athena-daed/'", panel)
+        self.assertIn("allow: 'clipboard-read; clipboard-write'", panel)
+        self.assertIn("allow-same-origin", panel)
+        self.assertIn("allow-scripts", panel)
+        self.assertNotIn("if (ready)", panel)
+        self.assertNotIn("var ready =", panel)
+        frame_index = panel.index("E('iframe'")
+        for field in ("daed_running", "daed_api_reachable"):
+            self.assertIn(field, panel[:frame_index])
+
 if __name__ == "__main__":
     unittest.main()

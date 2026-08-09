@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 import argparse
+import hashlib
 import json
+import re
 import zlib
 from pathlib import Path
 
@@ -41,6 +43,9 @@ WEB_ROOTFS_FILES = (
 WEB_FORBIDDEN_FILES = ("/etc/nginx/conf.d/athena-daed.conf",)
 GZIP_MAGIC = b"\x1f\x8b\x08"
 MAX_EMBEDDED_WEB_BYTES = 32 * 1024 * 1024
+STATIC_WEB_ROOT = "/www/athena-daed"
+STATIC_WEB_PROVENANCE = "/usr/share/athena/daed-static-web.json"
+IMAGE_SUFFIXES = {".avif", ".gif", ".ico", ".jpeg", ".jpg", ".png", ".svg", ".webp"}
 
 
 def embedded_gzip_payloads(binary: bytes):
@@ -67,6 +72,137 @@ def read_utf8(rootfs: Path, relative: str) -> str:
     return (rootfs / relative.lstrip("/")).read_text(
         encoding="utf-8", errors="strict"
     )
+
+
+def parse_local_asset_references(index_html: str) -> list[str]:
+    references = []
+    for match in re.finditer(r"(?:src|href)\s*=\s*(['\"])(\./[^'\"]+)\1", index_html, re.IGNORECASE):
+        reference = match.group(2)[2:].split("?", 1)[0].split("#", 1)[0]
+        if reference and reference not in references:
+            references.append(reference)
+    return sorted(references)
+
+
+def _tree_digest(entries: list[dict[str, object]]) -> str:
+    digest = hashlib.sha256()
+    for entry in entries:
+        digest.update(str(entry["path"]).encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(str(entry["sha256"]).encode("ascii"))
+        digest.update(b"\n")
+    return digest.hexdigest()
+
+
+def inspect_daed_static_ui(rootfs: Path) -> dict[str, object]:
+    static_root = rootfs / STATIC_WEB_ROOT.lstrip("/")
+    provenance_path = rootfs / STATIC_WEB_PROVENANCE.lstrip("/")
+    errors: list[str] = []
+    manifest: dict[str, object] = {}
+    if not provenance_path.is_file():
+        errors.append("missing-provenance")
+    else:
+        try:
+            loaded = json.loads(provenance_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                manifest = loaded
+            else:
+                errors.append("invalid-provenance")
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            errors.append("invalid-provenance")
+
+    listed = manifest.get("files", [])
+    if not isinstance(listed, list):
+        listed = []
+        errors.append("invalid-provenance-files")
+    expected: dict[str, dict[str, object]] = {}
+    for entry in listed:
+        if not isinstance(entry, dict) or not isinstance(entry.get("path"), str):
+            errors.append("invalid-provenance-entry")
+            continue
+        expected[str(entry["path"])] = entry
+
+    actual_paths = sorted(
+        path.relative_to(static_root).as_posix()
+        for path in static_root.rglob("*")
+        if path.is_file()
+    ) if static_root.is_dir() else []
+    for relative in sorted(set(expected) - set(actual_paths)):
+        errors.append(f"missing:{relative}")
+    for relative in sorted(set(actual_paths) - set(expected)):
+        errors.append(f"unlisted:{relative}")
+
+    actual_entries: list[dict[str, object]] = []
+    for relative in actual_paths:
+        payload = (static_root / relative).read_bytes()
+        entry = {
+            "path": relative,
+            "size": len(payload),
+            "sha256": hashlib.sha256(payload).hexdigest(),
+        }
+        actual_entries.append(entry)
+        wanted = expected.get(relative)
+        if wanted is not None:
+            if wanted.get("size") != entry["size"]:
+                errors.append(f"size:{relative}")
+            if wanted.get("sha256") != entry["sha256"]:
+                errors.append(f"hash:{relative}")
+
+    tree_sha256 = _tree_digest(actual_entries)
+    if manifest and manifest.get("file_count") != len(actual_entries):
+        errors.append("file-count-mismatch")
+    if manifest and manifest.get("tree_sha256") != tree_sha256:
+        errors.append("tree-hash-mismatch")
+
+    index_path = static_root / "index.html"
+    references: list[str] = []
+    browser_payload = b""
+    if not index_path.is_file():
+        if "index.html" not in expected:
+            errors.append("missing:index.html")
+    else:
+        try:
+            references = parse_local_asset_references(index_path.read_text(encoding="utf-8"))
+        except UnicodeError:
+            errors.append("invalid:index.html")
+        for reference in references:
+            if not (static_root / reference).is_file():
+                errors.append(f"missing-reference:{reference}")
+
+    javascript = [path for path in references if Path(path).suffix.lower() in {".js", ".mjs"}]
+    stylesheets = [path for path in references if Path(path).suffix.lower() == ".css"]
+    logos = [path for path in references if Path(path).suffix.lower() in IMAGE_SUFFIXES]
+    if not javascript:
+        errors.append("missing-javascript-reference")
+    if not stylesheets:
+        errors.append("missing-stylesheet-reference")
+    if not logos:
+        errors.append("missing-logo-reference")
+
+    for relative in actual_paths:
+        if Path(relative).suffix.lower() in {".html", ".js", ".mjs"}:
+            browser_payload += (static_root / relative).read_bytes() + b"\n"
+    if any(token in browser_payload for token in (b":2023/graphql", b"127.0.0.1:2023", b"192.168.50.1:2023")):
+        errors.append("browser-port-2023")
+    graphql_endpoint = "/athena-daed/graphql" if b"/athena-daed/graphql" in browser_payload else "missing"
+    if graphql_endpoint == "missing":
+        errors.append("missing-same-origin-graphql")
+
+    return {
+        "checked": True,
+        "index": f"{STATIC_WEB_ROOT}/index.html",
+        "file_count": len(actual_entries),
+        "tree_sha256": tree_sha256,
+        "javascript": [f"{STATIC_WEB_ROOT}/{path}" for path in javascript],
+        "stylesheets": [f"{STATIC_WEB_ROOT}/{path}" for path in stylesheets],
+        "logos": [f"{STATIC_WEB_ROOT}/{path}" for path in logos],
+        "graphql_endpoint": graphql_endpoint,
+        "errors": sorted(set(errors)),
+    }
+
+
+def _location_body(config: str, pattern: str) -> str | None:
+    match = re.search(pattern + r"\s*\{([^}]*)\}", config, re.DOTALL)
+    return match.group(1) if match else None
 
 
 def inspect_web(rootfs: Path) -> dict:
@@ -97,10 +233,19 @@ def inspect_web(rootfs: Path) -> dict:
     locations_path = "/etc/nginx/conf.d/athena-daed.locations"
     if locations_path not in missing:
         locations = read_utf8(rootfs, locations_path)
-        if "location /athena-daed/" not in locations:
+        static_ui = _location_body(locations, r"location\s+/athena-daed/")
+        graphql = _location_body(locations, r"location\s+=\s+/athena-daed/graphql")
+        if static_ui is None:
             missing.append("daed-ui-location")
-        if "location = /athena-daed/graphql" not in locations:
+        else:
+            if "root /www;" not in static_ui or "try_files $uri $uri/ /athena-daed/index.html;" not in static_ui:
+                missing.append("daed-static-ui-routing")
+            if "proxy_pass" in static_ui:
+                forbidden.append("daed-ui-whole-site-proxy")
+        if graphql is None:
             missing.append("daed-graphql-location")
+        elif "proxy_pass http://127.0.0.1:2023/graphql;" not in graphql:
+            missing.append("daed-graphql-loopback-proxy")
 
     panel_path = "/www/luci-static/resources/view/athena/daed-panel.js"
     if panel_path not in missing:
@@ -173,6 +318,17 @@ def main():
         "forbidden": [],
         "daed_endpoint": "not-checked",
     }
+    daed_static_ui = {
+        "checked": False,
+        "index": f"{STATIC_WEB_ROOT}/index.html",
+        "file_count": 0,
+        "tree_sha256": "",
+        "javascript": [],
+        "stylesheets": [],
+        "logos": [],
+        "graphql_endpoint": "not-checked",
+        "errors": [],
+    }
     if rootfs_candidates:
         rootfs = rootfs_candidates[0]
         dashboard_missing = [
@@ -181,6 +337,7 @@ def main():
             if not (rootfs / path.lstrip("/")).is_file()
         ]
         web_integration = inspect_web(rootfs)
+        daed_static_ui = inspect_daed_static_ui(rootfs)
 
     missing_packages = sorted(REQUIRED - packages) if packages else []
     if packages:
@@ -203,6 +360,7 @@ def main():
             "missing": dashboard_missing,
         },
         "web_integration": web_integration,
+        "daed_static_ui": daed_static_ui,
     }
     (output / "firmware-inspection.json").write_text(
         json.dumps(report, indent=2), encoding="utf-8", newline="\n"
@@ -221,6 +379,7 @@ def main():
         or bool(dashboard_missing)
         or bool(web_integration["missing"])
         or bool(web_integration["forbidden"])
+        or bool(daed_static_ui["errors"])
     )
     if failed:
         raise SystemExit(1)
