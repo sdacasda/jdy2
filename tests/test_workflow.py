@@ -69,6 +69,13 @@ class WorkflowTests(unittest.TestCase):
   self.assertLess(assemble,download)
   self.assertIn("daed-source-provenance",t)
 
+ def test_setup_go_does_not_probe_for_a_root_go_module(self):
+  t=(ROOT/".github/workflows/build-athena-v19.yml").read_text(encoding="utf-8")
+  self.assertRegex(
+   t,
+   r"actions/setup-go@v6[\s\S]*?go-version:\s*[\"']1\.26\.0[\"'][\s\S]*?cache:\s*false",
+  )
+
  def test_daed_cache_is_saved_immediately_after_source_preflight(self):
   t=(ROOT/".github/workflows/build-athena-v19.yml").read_text(encoding="utf-8")
   restore=t.index("actions/cache/restore@v5")

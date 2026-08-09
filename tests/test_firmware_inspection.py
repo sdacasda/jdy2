@@ -1,4 +1,5 @@
 from pathlib import Path
+import gzip
 import json
 import shutil
 import subprocess
@@ -194,6 +195,42 @@ class FirmwareInspectionTests(unittest.TestCase):
             output = root / "inspection"
             result = self.inspect(openwrt, output)
             report = json.loads((output / "firmware-inspection.json").read_text(encoding="utf-8"))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(report["web_integration"]["daed_endpoint"], "browser-port")
+
+    def test_same_origin_endpoint_in_gzip_embedded_web_passes(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            root = Path(directory)
+            openwrt, rootfs = self.make_fixture(root, dashboard_files=True)
+            endpoint = b"/athena-daed/graphql"
+            embedded = gzip.compress(b"const endpoint='" + endpoint + b"';", mtime=0)
+            self.assertNotIn(endpoint, embedded)
+            (rootfs / "usr/bin/daed").write_bytes(b"ELF\x00" + embedded + b"\x00EOF")
+            output = root / "inspection"
+
+            result = self.inspect(openwrt, output)
+            report = json.loads(
+                (output / "firmware-inspection.json").read_text(encoding="utf-8")
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(report["web_integration"]["daed_endpoint"], "same-origin")
+
+    def test_browser_port_in_gzip_embedded_web_fails(self):
+        with tempfile.TemporaryDirectory(dir=ROOT) as directory:
+            root = Path(directory)
+            openwrt, rootfs = self.make_fixture(root, dashboard_files=True)
+            browser_port = b":2023/graphql"
+            embedded = gzip.compress(b"const endpoint='" + browser_port + b"';", mtime=0)
+            self.assertNotIn(browser_port, embedded)
+            (rootfs / "usr/bin/daed").write_bytes(b"ELF\x00" + embedded + b"\x00EOF")
+            output = root / "inspection"
+
+            result = self.inspect(openwrt, output)
+            report = json.loads(
+                (output / "firmware-inspection.json").read_text(encoding="utf-8")
+            )
+
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual(report["web_integration"]["daed_endpoint"], "browser-port")
 

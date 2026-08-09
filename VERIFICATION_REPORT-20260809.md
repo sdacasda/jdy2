@@ -1,13 +1,13 @@
 # Athena v19.0.0-rc1 验证报告
 
-日期：2026-08-08
+日期：2026-08-09
 范围：源码、模板、运行时脚本、LuCI/Nginx 集成、Artifact 与固件离线检查逻辑。
 
 ## 已通过
 
 | 验证项 | 结果 |
 |---|---:|
-| Python 自动化测试 | 72 项通过，0 失败 |
+| Python 自动化测试 | 75 项通过，0 失败 |
 | OpenWrt/BusyBox 运行时测试 | 9 组通过，0 失败 |
 | 仪表盘图表计算 | 通过 |
 | DAED 模板与规则结构 | 通过 |
@@ -31,6 +31,10 @@
 - SmartDNS、OpenClash、PassWall 与 HomeProxy 未加入默认固件配置。
 
 ## 验证过程中发现并修复
+
+第 13 次 GitHub Actions 的 `compile=success`、`daedbuild=success`、`daedsource=success`，只有 `inspect=failure`。其 Artifact 证明确实生成了两个目标镜像，且内核大小、包清单、禁用包与仪表盘内容门槛均通过。失败原因是 DAED Web 被 gzip 后嵌入 Go ELF，旧检查器只搜索未压缩字节。新增回归测试先复现该误判，再验证修复；压缩资源中出现浏览器直连 `:2023/graphql` 的反向测试也必须失败。
+
+GitHub 的“Dependencies file is not found ... go.mod”来自 `actions/setup-go` 默认根目录缓存，与编译失败无关。工作流现显式设置 `cache: false`，继续使用项目独立、带 manifest 与 SHA-256 校验的 DAED 源码缓存。
 
 独立执行验证器时发现 `scripts/verify_package_layout.py` 仍要求已经删除的 `athena-daed.conf`。该检查器及测试夹具已改为要求 `athena-daed.locations`，随后独立测试和完整测试均通过。
 

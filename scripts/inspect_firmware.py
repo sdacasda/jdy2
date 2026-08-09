@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import json
+import zlib
 from pathlib import Path
 
 
@@ -38,6 +39,28 @@ WEB_ROOTFS_FILES = (
     "/usr/bin/daed",
 )
 WEB_FORBIDDEN_FILES = ("/etc/nginx/conf.d/athena-daed.conf",)
+GZIP_MAGIC = b"\x1f\x8b\x08"
+MAX_EMBEDDED_WEB_BYTES = 32 * 1024 * 1024
+
+
+def embedded_gzip_payloads(binary: bytes):
+    """Yield valid, bounded gzip members embedded in a Go ELF binary."""
+    offset = 0
+    while True:
+        offset = binary.find(GZIP_MAGIC, offset)
+        if offset < 0:
+            return
+        inflater = zlib.decompressobj(16 + zlib.MAX_WBITS)
+        try:
+            payload = inflater.decompress(
+                memoryview(binary)[offset:], MAX_EMBEDDED_WEB_BYTES + 1
+            )
+        except zlib.error:
+            offset += 1
+            continue
+        if inflater.eof and len(payload) <= MAX_EMBEDDED_WEB_BYTES:
+            yield payload
+        offset += 1
 
 
 def read_utf8(rootfs: Path, relative: str) -> str:
@@ -93,6 +116,12 @@ def inspect_web(rootfs: Path) -> dict:
         daed_bytes = daed_path.read_bytes()
         has_same_origin = b"/athena-daed/graphql" in daed_bytes
         has_browser_port = b":2023/graphql" in daed_bytes
+        if not (has_same_origin and has_browser_port):
+            for payload in embedded_gzip_payloads(daed_bytes):
+                has_same_origin = has_same_origin or b"/athena-daed/graphql" in payload
+                has_browser_port = has_browser_port or b":2023/graphql" in payload
+                if has_same_origin and has_browser_port:
+                    break
         if has_browser_port:
             daed_endpoint = "browser-port"
             forbidden.append("daed-binary-browser-port")

@@ -1,5 +1,12 @@
 # Changelog
 
+## v19.0.0-rc1 第 13 次构建检查修复
+
+- 第 13 次 GitHub Actions 已成功组装固定来源的 DAED、完成双镜像编译并生成 initramfs 与 sysupgrade；失败仅发生在最后的固件离线检查。
+- 修复检查器对 DAED ELF 内 gzip 嵌入前端的误判：现在会有界解压嵌入资源并验证同源 `/athena-daed/graphql`。
+- 保留反向安全门槛：即使 `:2023/graphql` 隐藏在 gzip 资源中，检查器仍会拒绝该镜像。
+- 关闭 `actions/setup-go` 无效的仓库根目录模块缓存，消除“找不到根目录 go.mod”的非致命警告；DAED 校验型源码缓存不受影响。
+
 ## v19.0.0-rc1 DAED 源码耐久性修复
 
 - 修复第 12 次构建中 `daed-src-2026.07.26-ecbc5c99d632.tar.gz` 上游 Release 资产返回 404，导致完整编译结束后无 initramfs 的问题。
