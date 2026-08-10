@@ -1,5 +1,7 @@
 # Athena v19 主页与完整 DAED UI 嵌入设计
 
+> 2026-08-10 状态门控修订：静态 DAED 资源仍随固件提供，但 LuCI 仅在 `daed_running && daed_api_reachable` 时嵌入 iframe；否则只显示“后端未连接”。本修订取代本文中关于无条件 iframe 的旧约束。
+
 日期：2026-08-09  
 状态：用户已批准设计方案
 

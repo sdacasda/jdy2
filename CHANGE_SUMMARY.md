@@ -7,7 +7,7 @@
 - 主页错误的根因是 `athena/chart.js` 返回普通对象，而 LuCI 的 `'require athena.chart'` 需要可实例化的类。模块现返回标准 `L.Class` 子类，现有采样、CPU、速率和 SVG 计算 API 保持不变。
 - `/athena-daed/` 现在由 Nginx 从 `/www/athena-daed/` 静态提供完整原生 DAED SPA；该目录来自本次固定 DAED 源码归档中的 `apps/web/dist`，不是独立下载或维护的第二套 UI。
 - `/athena-daed/graphql` 是唯一代理到 `127.0.0.1:2023/graphql` 的路径。静态 UI 不依赖 DAED 进程提供 HTML/CSS/JavaScript，直接访问 `192.168.50.1:2023` 仍应被拒绝。
-- LuCI 面板始终显示原生 DAED iframe。DAED 未启动、配置错误或 eBPF 与内核不兼容时，状态条会提示后端不可用，但完整 UI 仍保留。
+- LuCI 面板仅在 DAED 进程与 GraphQL API 都就绪时显示完整原生 iframe；后端未连接时只显示“后端未连接”。GraphQL 业务错误仍被正确识别为 API 已连接。
 - 安装器安全拒绝路径穿越、链接、缺失引用、浏览器可见 2023 和非同源 GraphQL；缓存、CI 和固件检查继续验证整棵静态资源树。
 
 这项修改明确不解决内核自身的 eBPF helper 兼容性；它保证后端失败不会连带让 DAED 管理 UI 消失。

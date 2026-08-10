@@ -5,7 +5,8 @@
 - 修复现代化主页的 LuCI 模块契约：`athena.chart` 现在返回可实例化的 `L.Class` 子类，不再触发 `factory yields invalid constructor`。
 - 完整 DAED 原生 UI 从与 DAED 二进制相同的固定源码归档提取，静态提供在 `/athena-daed/`；即使 DAED 默认关闭或 eBPF 加载失败，HTML/CSS/JavaScript 界面仍可打开。
 - 只有 `/athena-daed/graphql` 反向代理到 `127.0.0.1:2023/graphql`，浏览器不会直接访问或暴露 2023 端口。
-- LuCI 的“DAED 面板”始终嵌入完整原生界面；后端未就绪时只增加状态提示，不再用自定义页面替换原生 UI。
+- LuCI 的“DAED 面板”仅在进程与 GraphQL API 均就绪时嵌入完整原生界面；核心停止或后端不可达时仅显示“后端未连接”。
+- DAED API 健康探针改为 GraphQL POST，并将合法的 GraphQL `errors` 响应识别为“后端已连接”，避免把缺少节点等业务错误误报为 API 不可达。
 - 源码缓存与固件检查现在绑定完整静态 UI 的文件清单、大小、SHA-256 和树摘要，并拒绝缺少 JS、CSS、logo、错误端点或整站代理的产物。
 - GitHub Actions 在约四小时固件编译前检查静态 UI 和 provenance，安装器逻辑变化也会使 DAED 源码缓存失效。
 - 保持 DAED 默认关闭、仅监听回环地址，保留 Argon 深色主题配置、8080 恢复入口和原有网络/IoT/NSS/ECM 策略。

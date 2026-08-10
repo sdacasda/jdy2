@@ -26,7 +26,7 @@
 - `athena/chart.js` 返回可实例化的 LuCI `L.Class` 子类，现有图表计算方法保持可调用。
 - `/athena-daed/` 从 `/www/athena-daed/` 静态提供完整 DAED 原生 SPA，不代理整站。
 - 只有 `/athena-daed/graphql` 代理到 `127.0.0.1:2023/graphql`。
-- LuCI 始终创建同源 `/athena-daed/` iframe；DAED 停止或 API 不可达时仅增加状态提示。
+- LuCI 仅在 DAED 进程与 GraphQL API 都就绪时创建同源 `/athena-daed/` iframe；停止或不可达时仅显示“后端未连接”。
 - iframe 允许原生 UI 所需的脚本、表单、弹窗、下载和剪贴板功能，但不注入或改写 DAED UI。
 - 静态 UI 来自与 DAED 二进制相同的固定源码归档；安全安装器拒绝路径穿越、链接、缺失引用、浏览器 2023 端口和非同源 GraphQL。
 - 缓存 manifest 绑定完整静态 UI 文件清单、大小、SHA-256 和树摘要；旧 schema 或任一资源变化都会拒绝缓存。
@@ -41,8 +41,8 @@
 
 - 主页模块测试最初收到普通对象而非构造函数。
 - Nginx 测试最初发现 `/athena-daed/` 仍整站代理。
-- LuCI 测试最初发现 iframe 受 DAED 运行状态控制。
-- 验证器负向夹具最初错误接受整站代理、条件 iframe 和未接入安装器。
+- LuCI 新回归测试最初发现未就绪状态仍无条件创建 iframe。
+- API 回归测试最初发现合法 GraphQL `errors` 响应被旧 HTTP GET 探针误报为不可达。
 - 固件检查负向夹具最初错误接受缺少静态资源、危险端点和错误代理。
 - 工作流测试最初发现缓存键和长编译前门槛未包含静态 UI。
 
@@ -67,8 +67,8 @@
 2. 确认构建、DAED provenance、固件检查和 Artifact 上传全部成功。
 3. 校验 Artifact 中 SHA-256，只用 U-Boot 启动 initramfs，不写闪存。
 4. 验证 Argon 主页和动态图表，确认浏览器控制台无 `invalid constructor`。
-5. 在 DAED 保持关闭时进入“服务 → DAED 面板”，逐项打开完整原生 UI 导航。
-6. 启动 DAED，确认 `/athena-daed/graphql` 恢复数据，同时直接 `192.168.50.1:2023` 仍拒绝连接。
+5. 在 DAED 保持关闭时进入“服务 → DAED 面板”，确认只显示“后端未连接”，且不创建原生 UI iframe。
+6. 启动 DAED，确认 `/athena-daed/graphql` 恢复数据并显示完整原生 UI，同时直接 `192.168.50.1:2023` 仍拒绝连接。
 7. 检查 eBPF、三路 Wi-Fi、独立 2.4 GHz IoT SSID、WAN、DNS、NSS/ECM/Flow Offload 和 8080 恢复入口。
 8. 运行 Artifact 中的 `tools/verify-after-flash.sh`。
 9. 只有全部关键项通过后，才评估 `sysupgrade -n`。

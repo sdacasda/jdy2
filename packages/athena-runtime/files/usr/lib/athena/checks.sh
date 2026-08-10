@@ -67,9 +67,7 @@ athena_health_daed_api() {
 	athena_check_override ATHENA_DAED_API_REACHABLE
 	case $? in 0) return 0;; 1) return 1;; esac
 	athena_health_daed_running || return 1
-	command -v wget >/dev/null 2>&1 || return 1
-	response="$(wget -S -O /dev/null -T 2 http://127.0.0.1:2023/graphql 2>&1 || true)"
-	printf '%s\n' "$response" | grep -Eq 'HTTP/[0-9.]+[[:space:]]+[0-9]{3}'
+	athena_daed_graphql_reachable
 }
 
 athena_run_checks() {

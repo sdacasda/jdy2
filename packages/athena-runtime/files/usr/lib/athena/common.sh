@@ -92,3 +92,29 @@ athena_is_hostname() {
 athena_json_escape() {
 	printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
 }
+
+athena_daed_graphql_reachable() {
+	url="${ATHENA_DAED_GRAPHQL_URL:-http://127.0.0.1:2023/graphql}"
+	payload='{"query":"query AthenaHealth { __typename }"}'
+	if command -v wget >/dev/null 2>&1; then
+		response="$(wget -S -O - -T 2 \
+			--header='Content-Type: application/json' \
+			--post-data="$payload" "$url" 2>&1 || true)"
+		printf '%s\n' "$response" | grep -Eq \
+			'"(data|errors)"[[:space:]]*:|HTTP/[0-9.]+[[:space:]]+[0-9]{3}'
+		return
+	fi
+	if command -v nc >/dev/null 2>&1; then
+		length="$(printf '%s' "$payload" | wc -c | tr -d ' ')"
+		{
+			printf 'POST /graphql HTTP/1.0\r\n'
+			printf 'Host: localhost\r\n'
+			printf 'Content-Type: application/json\r\n'
+			printf 'Content-Length: %s\r\n\r\n' "$length"
+			printf '%s' "$payload"
+		} | nc -w 2 127.0.0.1 2023 2>/dev/null |
+			grep -Eq '^HTTP/[0-9.]+[[:space:]]+[0-9]{3}'
+		return
+	fi
+	return 1
+}

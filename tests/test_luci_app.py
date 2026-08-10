@@ -77,7 +77,7 @@ class LuciAppTests(unittest.TestCase):
         self.assertNotIn("http://", panel)
         self.assertNotIn("https://", panel)
 
-    def test_daed_panel_always_embeds_the_complete_original_ui(self):
+    def test_daed_panel_only_embeds_the_complete_original_ui_when_ready(self):
         panel = (
             ROOT
             / "packages/luci-app-athena/htdocs/luci-static/resources/view/athena/daed-panel.js"
@@ -86,9 +86,15 @@ class LuciAppTests(unittest.TestCase):
         self.assertIn("allow: 'clipboard-read; clipboard-write'", panel)
         self.assertIn("allow-same-origin", panel)
         self.assertIn("allow-scripts", panel)
-        self.assertNotIn("if (ready)", panel)
-        self.assertNotIn("var ready =", panel)
+        self.assertIn("var ready = !!s.daed_running && !!s.daed_api_reachable", panel)
+        self.assertIn("if (!ready)", panel)
+        self.assertIn("_('后端未连接')", panel)
+        self.assertNotIn("DAED 后端尚未就绪", panel)
+        self.assertNotIn("athena-health --verbose", panel)
+        self.assertNotIn("recovery_url", panel)
         frame_index = panel.index("E('iframe'")
+        ready_index = panel.index("if (!ready)")
+        self.assertLess(ready_index, frame_index)
         for field in ("daed_running", "daed_api_reachable"):
             self.assertIn(field, panel[:frame_index])
 

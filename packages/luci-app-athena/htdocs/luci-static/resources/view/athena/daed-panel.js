@@ -14,17 +14,6 @@ function statusChip(label, active) {
 	]);
 }
 
-function errorMessage(errorClass) {
-	var messages = {
-		ebpf: _('DAED 的 eBPF 程序与当前内核不兼容。管理页面仍可使用，请先查看健康检查。'),
-		configuration: _('DAED 配置无法加载，请检查最近导入的配置模板。'),
-		memory: _('DAED 启动时可用内存不足。'),
-		unavailable: _('DAED 管理 API 尚未就绪。'),
-		none: _('DAED 尚未启动。')
-	};
-	return messages[errorClass] || messages.unavailable;
-}
-
 return view.extend({
 	load: function() {
 		return callStatus();
@@ -45,6 +34,7 @@ return view.extend({
 	},
 
 	render: function(s) {
+		var ready = !!s.daed_running && !!s.daed_api_reachable;
 		var page = E('div', { class: 'athena-daed-page' }, [
 			E('style', {}, [
 				'.athena-daed-page{display:grid;gap:16px}',
@@ -71,23 +61,20 @@ return view.extend({
 			E('button', { class: 'btn cbi-button-neutral', click: this.handleRefresh.bind(this) }, _('重新检测'))
 		]));
 
-		if (!s.daed_running || !s.daed_api_reachable) {
+		if (!ready) {
 			page.appendChild(E('div', { class: 'athena-daed-card' }, [
-				E('h3', {}, _('DAED 后端尚未就绪')),
-				E('p', {}, errorMessage(s.daed_error_class)),
-				E('p', {}, [ _('恢复入口：'), E('a', { href: s.recovery_url || '#', target: '_blank', rel: 'noreferrer' }, s.recovery_url || '-') ]),
-				E('code', {}, 'athena-health --verbose')
+				E('h3', {}, _('后端未连接'))
 			]));
+		} else {
+			page.appendChild(E('iframe', {
+				src: '/athena-daed/',
+				class: 'athena-daed-frame',
+				sandbox: 'allow-same-origin allow-scripts allow-forms allow-modals allow-downloads allow-popups',
+				allow: 'clipboard-read; clipboard-write',
+				referrerpolicy: 'same-origin',
+				title: 'DAED'
+			}));
 		}
-
-		page.appendChild(E('iframe', {
-			src: '/athena-daed/',
-			class: 'athena-daed-frame',
-			sandbox: 'allow-same-origin allow-scripts allow-forms allow-modals allow-downloads allow-popups',
-			allow: 'clipboard-read; clipboard-write',
-			referrerpolicy: 'same-origin',
-			title: 'DAED'
-		}));
 		return page;
 	},
 

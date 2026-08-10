@@ -1,5 +1,7 @@
 # Athena Homepage and Embedded DAED UI Implementation Plan
 
+> 2026-08-10 修订：用户后续明确要求核心停止或 API 不可达时仅显示“后端未连接”。本文中“无条件创建 iframe”的历史步骤已由就绪状态门控取代；当前实现和验证以 `scripts/verify_web_config.py` 为准。
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** 修复 Athena 现代化主页的 LuCI 模块加载错误，并让与 DAED 二进制同源、同版本、同次构建的完整原生 DAED UI 在服务关闭或后端失败时仍可通过 LuCI/Argon 打开。

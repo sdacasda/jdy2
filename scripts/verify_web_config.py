@@ -74,9 +74,20 @@ def main():
     require("src: '/athena-daed/'" in panel, "DAED panel iframe path is missing")
     require(panel.count("E('iframe'") == 1, "DAED panel must create exactly one iframe")
     require(
-        "\n\t\tpage.appendChild(E('iframe'" in panel,
-        "DAED iframe must be appended unconditionally from the render body",
+        "var ready = !!s.daed_running && !!s.daed_api_reachable" in panel,
+        "DAED readiness gate is missing",
     )
+    require(
+        "if (!ready)" in panel and "_('后端未连接')" in panel,
+        "DAED disconnected state must show only the concise backend message",
+    )
+    require(
+        "\n\t\t\tpage.appendChild(E('iframe'" in panel,
+        "DAED iframe must only be appended from the ready branch",
+    )
+    require("DAED 后端尚未就绪" not in panel, "legacy DAED error card remains")
+    require("athena-health --verbose" not in panel, "disconnected state must not expose diagnostics")
+    require("recovery_url" not in panel, "disconnected state must not expose the recovery URL")
     require(
         not re.search(r"https?://[^'\"\s]*:2023|192\.168\.50\.1:2023", panel),
         "browser-visible DAED port 2023 is forbidden",

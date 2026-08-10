@@ -16,7 +16,7 @@ Nginx 是 80/443 的唯一所有者。uHTTPd 只监听 LAN 地址 `192.168.50.1:
 - **进程运行**：DAED 进程是否仍然存在。
 - **API 可达**：路由器本机能否访问 DAED GraphQL。
 
-“已启用”不等于“已运行”。如果 eBPF verifier、配置或内存检查失败，面板会显示对应分类，且不会加载空白 iframe。
+“已启用”不等于“已运行”。如果 eBPF verifier、配置或内存检查失败，面板不会加载 DAED iframe，仅显示“后端未连接”；详细分类保留在 `athena-health --verbose` 和 DAED 日志中。
 
 ## 只读检查
 

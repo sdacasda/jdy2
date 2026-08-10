@@ -121,20 +121,21 @@ class WebTests(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0, result.stdout)
 
-    def test_rejects_conditional_daed_iframe(self):
+    def test_rejects_unconditional_daed_iframe(self):
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
             copy_web_fixture(root)
             panel = root / "packages/luci-app-athena/htdocs/luci-static/resources/view/athena/daed-panel.js"
-            text = panel.read_text(encoding="utf-8").replace(
-                "\t\tpage.appendChild(E('iframe', {",
-                "\t\tif (s.daed_running)\n\t\t\tpage.appendChild(E('iframe', {",
+            panel.write_text(
+                "'use strict';\n"
+                "page.appendChild(E('iframe', { src: '/athena-daed/' }));\n",
+                encoding="utf-8",
             )
-            panel.write_text(text, encoding="utf-8")
 
             result = validate_web(root)
 
             self.assertNotEqual(result.returncode, 0, result.stdout)
+            self.assertIn("readiness gate", result.stdout)
 
     def test_rejects_browser_visible_port_2023(self):
         with tempfile.TemporaryDirectory() as directory:
