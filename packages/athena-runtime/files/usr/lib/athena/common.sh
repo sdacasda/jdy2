@@ -100,9 +100,10 @@ athena_daed_graphql_reachable() {
 		response="$(wget -S -O - -T 2 \
 			--header='Content-Type: application/json' \
 			--post-data="$payload" "$url" 2>&1 || true)"
-		printf '%s\n' "$response" | grep -Eq \
-			'"(data|errors)"[[:space:]]*:|HTTP/[0-9.]+[[:space:]]+[0-9]{3}'
-		return
+		if printf '%s\n' "$response" | grep -Eq \
+			'"(data|errors)"[[:space:]]*:|HTTP/[0-9.]+[[:space:]]+[0-9]{3}'; then
+			return 0
+		fi
 	fi
 	if command -v nc >/dev/null 2>&1; then
 		length="$(printf '%s' "$payload" | wc -c | tr -d ' ')"

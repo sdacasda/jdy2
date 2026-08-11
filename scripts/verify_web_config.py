@@ -74,11 +74,11 @@ def main():
     require("src: '/athena-daed/'" in panel, "DAED panel iframe path is missing")
     require(panel.count("E('iframe'") == 1, "DAED panel must create exactly one iframe")
     require(
-        "var ready = !!s.daed_running && !!s.daed_api_reachable" in panel,
-        "DAED readiness gate is missing",
+        "var backendRunning = !!s.daed_running" in panel,
+        "DAED process gate is missing",
     )
     require(
-        "if (!ready)" in panel and "_('后端未连接')" in panel,
+        "if (!backendRunning)" in panel and "_('后端未连接')" in panel,
         "DAED disconnected state must show only the concise backend message",
     )
     require(

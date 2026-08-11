@@ -91,6 +91,16 @@ class WebTests(unittest.TestCase):
         ):
             self.assertIn(required, validator)
 
+    def test_validator_gates_daed_ui_on_process_not_api_probe(self):
+        validator = (ROOT / "scripts/verify_web_config.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("var backendRunning = !!s.daed_running", validator)
+        self.assertNotIn(
+            "var ready = !!s.daed_running && !!s.daed_api_reachable",
+            validator,
+        )
+
     def test_rejects_whole_daed_site_proxy(self):
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
@@ -135,7 +145,7 @@ class WebTests(unittest.TestCase):
             result = validate_web(root)
 
             self.assertNotEqual(result.returncode, 0, result.stdout)
-            self.assertIn("readiness gate", result.stdout)
+            self.assertIn("process gate", result.stdout)
 
     def test_rejects_browser_visible_port_2023(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -68,7 +68,9 @@ athena_dashboard_memory() {
 
 athena_dashboard_wan() {
 	wan_json="$(ubus call network.interface.wan status 2>/dev/null || true)"
+	wan6_json="$(ubus call network.interface.wan6 status 2>/dev/null || true)"
 	wan_compact="$(printf '%s' "$wan_json" | tr -d '\n')"
+	wan6_compact="$(printf '%s' "$wan6_json" | tr -d '\n')"
 	wan_device="$(printf '%s' "$wan_compact" |
 		sed -n 's/.*"l3_device"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' |
 		head -n 1)"
@@ -84,8 +86,11 @@ athena_dashboard_wan() {
 	else
 		wan_ipv4=0
 	fi
-	if printf '%s' "$wan_compact" |
+	if printf '%s%s' "$wan_compact" "$wan6_compact" |
 		grep -Eq '"ipv6-address"[[:space:]]*:[[:space:]]*\[[[:space:]]*\{'; then
+		wan_ipv6=1
+	elif printf '%s%s' "$wan_compact" "$wan6_compact" |
+		grep -Eq '"ipv6-prefix"[[:space:]]*:[[:space:]]*\[[[:space:]]*\{'; then
 		wan_ipv6=1
 	else
 		wan_ipv6=0

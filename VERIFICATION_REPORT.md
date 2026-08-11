@@ -1,5 +1,12 @@
 # Athena v19.0.0-rc1 验证报告
 
+## 2026-08-11 增量验证
+
+- 新增 `wan` 无 IPv6、`wan6` 有 IPv6 地址/前缀的回归用例，修复前失败、修复后通过。
+- 新增 BusyBox `wget` POST 不可用、`nc` 本地 GraphQL 响应成功的回归用例，修复前失败、修复后通过。
+- 新增 LuCI DAED 面板只按进程状态控制完整 iframe 的回归断言，修复前失败、修复后通过。
+- 完整本地静态与单元测试结果见 `IPV6_DAED_STATUS_FIX_VALIDATION.md`；完整固件编译和 RE-CS-02 initramfs 真机复测仍需 GitHub Actions 与设备完成。
+
 日期：2026-08-09
 范围：主页 LuCI 模块、固定来源 DAED 静态 UI、Nginx/GraphQL 分流、源码缓存、固件离线检查、CI 前置门槛和既有 v19 功能回归。
 

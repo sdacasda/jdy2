@@ -1,5 +1,12 @@
 # Changelog
 
+## v19.0.0-rc1 IPv6 与 DAED 状态修复
+
+- 首页同时读取 `network.interface.wan` 与独立的 `network.interface.wan6`，可识别 `wan6` 上的 IPv6 地址或下发前缀，不再把有效双栈连接误报为“IPv6 未连接”。
+- DAED 完整原生 UI 仅在 `daed` 进程停止时隐藏；进程运行时始终嵌入同源 `/athena-daed/`，GraphQL 业务状态由原生界面自行展示。
+- DAED GraphQL 探针在 BusyBox `wget` 不支持 POST 参数或请求失败时继续使用本地 `nc` 探针，不再提前返回错误状态。
+- 继续禁止浏览器直接访问 LAN `:2023`；`192.168.50.1:2023` 返回连接拒绝是 loopback-only 安全策略的预期结果。
+
 ## v19.0.0-rc1 原生 DAED UI 与主页修复
 
 - 修复现代化主页的 LuCI 模块契约：`athena.chart` 现在返回可实例化的 `L.Class` 子类，不再触发 `factory yields invalid constructor`。

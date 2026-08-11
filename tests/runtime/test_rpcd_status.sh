@@ -38,4 +38,23 @@ printf '%s' "$output" | grep -q '"daed_running":true'
 printf '%s' "$output" | grep -q '"daed_api_reachable":true'
 printf '%s' "$output" | grep -q '"daed_error_class":"none"'
 
+# Some OpenWrt BusyBox wget builds reject --post-data.  A failed wget probe
+# must fall through to the local TCP probe instead of reporting a false
+# disconnect while the DAED GraphQL listener is healthy.
+cat >"$mock_bin/wget" <<'EOF'
+#!/bin/sh
+printf '%s\n' 'wget: unrecognized option: post-data' >&2
+exit 1
+EOF
+cat >"$mock_bin/nc" <<'EOF'
+#!/bin/sh
+cat >/dev/null
+printf 'HTTP/1.1 401 Unauthorized\r\nContent-Type: application/json\r\n\r\n'
+printf '%s\n' '{"errors":[{"message":"authentication required"}]}'
+EOF
+command -v chmod >/dev/null 2>&1 && chmod +x "$mock_bin/wget" "$mock_bin/nc" || true
+output="$(PATH="$mock_bin:$PATH" sh "$SCRIPT" call status)"
+printf '%s' "$output" | grep -q '"daed_api_reachable":true'
+printf '%s' "$output" | grep -q '"daed_error_class":"none"'
+
 printf 'PASS: rpcd status\n'

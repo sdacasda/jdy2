@@ -34,7 +34,7 @@ return view.extend({
 	},
 
 	render: function(s) {
-		var ready = !!s.daed_running && !!s.daed_api_reachable;
+		var backendRunning = !!s.daed_running;
 		var page = E('div', { class: 'athena-daed-page' }, [
 			E('style', {}, [
 				'.athena-daed-page{display:grid;gap:16px}',
@@ -61,7 +61,7 @@ return view.extend({
 			E('button', { class: 'btn cbi-button-neutral', click: this.handleRefresh.bind(this) }, _('重新检测'))
 		]));
 
-		if (!ready) {
+		if (!backendRunning) {
 			page.appendChild(E('div', { class: 'athena-daed-card' }, [
 				E('h3', {}, _('后端未连接'))
 			]));

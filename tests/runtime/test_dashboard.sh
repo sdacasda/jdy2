@@ -56,7 +56,10 @@ cat >"$MOCK_BIN/ubus" <<'EOF'
 #!/bin/sh
 case "$*" in
 	*"network.interface.wan status"*)
-		echo '{"up":true,"l3_device":"eth1","ipv4-address":[{"address":"192.0.2.2"}],"ipv6-address":[{"address":"2001:db8::2"}],"dns-server":["223.5.5.5"]}'
+		echo '{"up":true,"l3_device":"eth1","ipv4-address":[{"address":"192.0.2.2"}],"ipv6-address":[],"dns-server":["223.5.5.5"]}'
+		;;
+	*"network.interface.wan6 status"*)
+		echo '{"up":true,"l3_device":"eth1","ipv6-address":[{"address":"2001:db8::2"}],"ipv6-prefix":[{"address":"2001:db8:1::","mask":64}]}'
 		;;
 	*"network.wireless status"*)
 		echo '{"radio0":{"up":true},"radio1":{"up":true},"radio2":{"up":true}}'
