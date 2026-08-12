@@ -1,5 +1,12 @@
 # Changelog
 
+## v19.0.0-rc2 DAED 登录恢复
+
+- 修复 DAED 首次账户创建的 SQLite 并发初始化，并对登录/设置错误实施脱敏，避免浏览器显示提交的密码或 GraphQL 请求变量。
+- 新增认证、确认语句和备份优先的 DAED 密码恢复；恢复前保存 `wing.db` 与 SQLite sidecar，失败时保留备份并尽力恢复原有服务运行状态。
+- DAED 继续仅监听 `127.0.0.1:2023`，通过 LuCI 同源 `/athena-daed/` 面板访问；LAN 不能直连端口 2023 是预期安全策略。
+- 退役用户配置模板导入流程；内部模板仍随固件提供，`athena-setup` 不再要求用户导入。
+
 ## v19.0.0-rc1 IPv6 与 DAED 状态修复
 
 - 首页同时读取 `network.interface.wan` 与独立的 `network.interface.wan6`，可识别 `wan6` 上的 IPv6 地址或下发前缀，不再把有效双栈连接误报为“IPv6 未连接”。

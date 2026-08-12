@@ -6,7 +6,7 @@ mkdir -p "$FILES/etc/uci-defaults" "$FILES/etc" "$FILES/www"
 
 cp "$(dirname "$0")/../PROJECT.json" "$FILES/etc/athena-project.json"
 cat >"$FILES/etc/athena-release" <<'EOF'
-ATHENA_VERSION='19.0.0-rc1'
+ATHENA_VERSION='19.0.0-rc2'
 ATHENA_LAN='192.168.50.1'
 ATHENA_PROFILE='stable'
 EOF

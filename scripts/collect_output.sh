@@ -99,8 +99,8 @@ upstream_sums="$(
 [ -z "$upstream_sums" ] ||
 	cp "$upstream_sums" "$OUTPUT/firmware/UPSTREAM_SHA256SUMS"
 cp "$PROJECT_ROOT/scripts/verify_after_flash.sh" "$PROJECT_ROOT/scripts/verify_checksums.sh" "$OUTPUT/tools/"
-for f in FLASH.md SETUP.md RECOVERY.md IOT_WIFI.md WEB_RECOVERY.md; do [ ! -f "$PROJECT_ROOT/docs/$f" ] || cp "$PROJECT_ROOT/docs/$f" "$OUTPUT/docs/"; done
-printf 'version=19.0.0-rc1\nbuild_time_utc=%s\n' "$(date -u +%FT%TZ)" >"$OUTPUT/metadata/BUILD_INFO.txt"
+for f in FLASH.md SETUP.md RECOVERY.md IOT_WIFI.md WEB_RECOVERY.md DAED_LOGIN_RECOVERY.md; do [ ! -f "$PROJECT_ROOT/docs/$f" ] || cp "$PROJECT_ROOT/docs/$f" "$OUTPUT/docs/"; done
+printf 'version=19.0.0-rc2\nbuild_time_utc=%s\n' "$(date -u +%FT%TZ)" >"$OUTPUT/metadata/BUILD_INFO.txt"
 (cd "$OUTPUT/firmware" && find . -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum >SHA256SUMS)
 (cd "$OUTPUT" && find . -type f ! -name SHA256SUMS.txt -print0 | sort -z | xargs -0 sha256sum >SHA256SUMS.txt)
 echo "PASS: artifact collected in $OUTPUT"

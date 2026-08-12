@@ -54,7 +54,7 @@ athena_recovery_web_ok() {
 athena_health_daed_enabled() {
 	athena_check_override ATHENA_DAED_ENABLED
 	case $? in 0) return 0;; 1) return 1;; esac
-	/etc/init.d/daed enabled >/dev/null 2>&1
+	"$(athena_root /etc/init.d/daed)" enabled >/dev/null 2>&1
 }
 
 athena_health_daed_running() {
@@ -71,15 +71,18 @@ athena_health_daed_api() {
 }
 
 athena_run_checks() {
+	check_mode="${1:-normal}"
 	ATHENA_HEALTH_FAILS=0
 	ATHENA_HEALTH_RECORDS=''
 	state="$(athena_root /var/lib/athena/setup-state)"
 	initialized=0
 	[ -r "$state" ] && grep -q '^STATE=complete$' "$state" && initialized=1
+	strict=0
+	[ "$check_mode" != strict ] || strict=1
 	if [ "$initialized" -eq 1 ]; then
 		athena_check_add setup_state advisory PASS "Athena setup is complete"
 	else
-		athena_check_add setup_state advisory WARN "Athena setup is not complete" "Run athena-setup after importing a node."
+		athena_check_add setup_state advisory WARN "Athena setup is not complete" "Run athena-setup."
 	fi
 
 	if [ -r "$(athena_root /etc/config/athena)" ]; then
@@ -112,21 +115,19 @@ athena_run_checks() {
 
 	if athena_health_daed_enabled; then
 		athena_check_add daed_enabled advisory PASS "DAED is enabled at boot"
-	elif [ "$initialized" -eq 1 ]; then
-		athena_check_add daed_enabled critical FAIL "DAED is not enabled after setup" "Enable DAED after validating its configuration."
 	else
-		athena_check_add daed_enabled advisory WARN "DAED is disabled by safe default" "Import templates, then run athena-setup."
+		athena_check_add daed_enabled advisory WARN "DAED is disabled by safe default" "Enable it only after validating a configuration."
 	fi
 	if athena_health_daed_running; then
 		athena_check_add daed_process advisory PASS "DAED process is running"
-	elif [ "$initialized" -eq 1 ]; then
+	elif { [ "$initialized" -eq 1 ] || [ "$strict" -eq 1 ]; } && athena_health_daed_enabled; then
 		athena_check_add daed_process critical FAIL "DAED process stopped after initialization" "Review DAED logs before restarting it."
 	else
 		athena_check_add daed_process advisory WARN "DAED process is stopped by safe default"
 	fi
 	if athena_health_daed_api; then
 		athena_check_add daed_api advisory PASS "DAED loopback API is reachable"
-	elif [ "$initialized" -eq 1 ]; then
+	elif { [ "$initialized" -eq 1 ] || [ "$strict" -eq 1 ]; } && athena_health_daed_enabled; then
 		athena_check_add daed_api critical FAIL "DAED loopback API is unreachable" "Check for eBPF, configuration, or memory startup errors."
 	else
 		athena_check_add daed_api advisory WARN "DAED API is unavailable while DAED is off"
@@ -136,16 +137,12 @@ athena_run_checks() {
 		flag="$(athena_root /sys/kernel/debug/ecm/front_end_${family}_stop)"
 		if [ -r "$flag" ] && [ "$(cat "$flag" 2>/dev/null)" = "1" ]; then
 			athena_check_add "ecm_$family" critical PASS "ECM $family frontend is stopped"
-		elif [ "$initialized" -eq 1 ]; then
+		elif [ "$initialized" -eq 1 ] || [ "$strict" -eq 1 ]; then
 			athena_check_add "ecm_$family" critical FAIL "ECM $family frontend is active" "Run athena-runtime apply."
 		else
 			athena_check_add "ecm_$family" advisory WARN "ECM $family policy is not yet applied"
 		fi
 	done
-
-	[ -d "$(athena_root /etc/athena/generated)" ] &&
-		athena_check_add templates advisory PASS "Generated template directory exists" ||
-		athena_check_add templates advisory WARN "DAED templates have not been generated"
 
 	if [ "$(athena_uci_get athena.main.iot_enabled 0)" = "1" ]; then
 		section="$(athena_uci_get athena.main.iot_section athena_iot)"
@@ -161,7 +158,7 @@ athena_run_checks() {
 	[ ! -r "$log" ] || count="$(grep -c 'bootstrap resolver returned no usable address' "$log" 2>/dev/null || true)"
 	[ "$count" -eq 0 ] &&
 		athena_check_add bootstrap_dns advisory PASS "No bootstrap resolver loop detected" ||
-		athena_check_add bootstrap_dns critical FAIL "Bootstrap resolver failures detected" "Review the generated DNS template."
+		athena_check_add bootstrap_dns critical FAIL "Bootstrap resolver failures detected" "Review DAED DNS configuration."
 }
 
 athena_health_json() {

@@ -15,11 +15,6 @@
     "order": 20,
     "action": { "type": "view", "path": "athena/daed-panel" }
   },
-  "admin/services/athena/templates": {
-    "title": "配置模板",
-    "order": 30,
-    "action": { "type": "view", "path": "athena/templates" }
-  },
   "admin/services/athena/backups": {
     "title": "备份与回滚",
     "order": 40,

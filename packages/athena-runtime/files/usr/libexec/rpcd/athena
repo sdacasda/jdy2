@@ -3,6 +3,7 @@
 ATHENA_LIBDIR="${ATHENA_LIBDIR:-/usr/lib/athena}"
 . "$ATHENA_LIBDIR/common.sh"
 . "$ATHENA_LIBDIR/dashboard.sh"
+. "$ATHENA_LIBDIR/daed-recovery.sh"
 
 athena_daed_enabled() {
 	if [ "${ATHENA_DAED_ENABLED+x}" = x ]; then
@@ -56,7 +57,7 @@ athena_status_json() {
 	athena_daed_running && running=1 || running=0
 	athena_daed_api_reachable && api=1 || api=0
 	json_init
-	json_add_string version "19.0.0-rc1"
+	json_add_string version "19.0.0-rc2"
 	json_add_string setup_state "$(sed -n 's/^STATE=//p' "$(athena_root /var/lib/athena/setup-state)" 2>/dev/null | tail -n1)"
 	json_add_boolean daed_enabled "$enabled"
 	json_add_boolean daed_running "$running"
@@ -87,7 +88,7 @@ athena_daed_stop() {
 
 case "$1" in
 	list)
-		echo '{"status":{},"dashboard":{},"health":{},"templates":{},"backups":{},"runtime_apply":{},"daed_start":{},"daed_stop":{},"rollback":{"id":"String","confirm":"Boolean"}}'
+		echo '{"status":{},"dashboard":{},"health":{},"backups":{},"runtime_apply":{},"daed_start":{},"daed_stop":{},"daed_reset_password":{"confirmation":"String"},"rollback":{"id":"String","confirm":"Boolean"}}'
 		;;
 	call)
 		method="$2"
@@ -95,16 +96,18 @@ case "$1" in
 			status) athena_status_json ;;
 			daed_start) athena_daed_start ;;
 			daed_stop) athena_daed_stop ;;
+			daed_reset_password)
+				json_load "${3:-{}}"
+				json_get_type confirmation_type confirmation
+				json_get_var confirmation confirmation
+				[ "$confirmation_type" = string ] && [ "$confirmation" = 'RESET DAED PASSWORD' ] || {
+					echo '{"ok":false,"error":"confirmation phrase is required"}'
+					exit 1
+				}
+				athena_daed_reset_password "$confirmation"
+				;;
 			dashboard) athena_dashboard_json ;;
 			health) athena-health --json ;;
-			templates)
-				json_init; json_add_object files
-				for f in global.dae dns.dae routing.dae IMPORT.md; do
-					[ -r "/etc/athena/generated/$f" ] || continue
-					json_add_string "$f" "$(head -c 65536 "/etc/athena/generated/$f")"
-				done
-				json_close_object; json_dump
-				;;
 			backups) json_init; json_add_string ids "$(athena-backup --list 2>/dev/null | head -n 20 | tr '\n' ' ')"; json_dump ;;
 			runtime_apply) athena-runtime apply; echo '{"ok":true}' ;;
 			rollback)

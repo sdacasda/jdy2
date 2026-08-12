@@ -1,0 +1,19 @@
+{
+  "assembly_pin": {
+    "commit": "b16dbbd3f94558c30d9a875c7e8daf91d4718747",
+    "repository": "https://github.com/kenzok8/openwrt-daede.git"
+  },
+  "resolved_daed": {
+    "commit": "671e65d2fdcd62fe6a3ec18ecda209c5addea898",
+    "repository": "https://github.com/daeuniverse/daed.git"
+  },
+  "upstream_sha256": {
+    "apps/web/src/constants/default.ts": "a07daaa2dc9eeb65171d5953c9c9b1020d38513a277232bf26cff05e378dc13c",
+    "apps/web/src/pages/Setup.tsx": "8cb53c5ad6ec32be10df3e04661905600d2080e69eeec0f77ab991d4e2231490"
+  },
+  "fixture_sha256": {
+    "apps/web/src/constants/default.ts": "a07daaa2dc9eeb65171d5953c9c9b1020d38513a277232bf26cff05e378dc13c",
+    "apps/web/src/pages/Setup.tsx": "8cb53c5ad6ec32be10df3e04661905600d2080e69eeec0f77ab991d4e2231490",
+    "graphql-request-error.json": "1f460f0d2d5fe373c82f3686ca4ba8ecff6db768ec6c21d04c221bd70f759850"
+  }
+}

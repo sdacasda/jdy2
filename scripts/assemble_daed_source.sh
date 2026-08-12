@@ -31,11 +31,12 @@ SOURCE_NAME="$(sed -n 's/^PKG_SOURCE:=//p' "$MAKEFILE")"
 [ -n "$SOURCE_NAME" ] || { echo "DAED PKG_SOURCE is missing" >&2; exit 1; }
 
 PATCH_HASH="$(sha256sum "$PROJECT_ROOT/scripts/patch_daed_web.py" | cut -d' ' -f1)"
+DATABASE_PATCH_HASH="$(sha256sum "$PROJECT_ROOT/scripts/patch_daed_database.py" | cut -d' ' -f1)"
 ASSEMBLY_HASH="$(sha256sum "${BASH_SOURCE[0]}" | cut -d' ' -f1)"
 CACHE_ID="$(printf '%s\n' \
 	"$DAED_VERSION" "$DAED_COMMIT" "$WING_COMMIT" "$CORE_COMMIT" \
 	"$CORE_UPSTREAM_COMMIT" "$OUTBOUND_COMMIT" "$QUICGO_BASE_COMMIT" \
-	"$PATCH_HASH" "$ASSEMBLY_HASH" | sha256sum | cut -c1-16)"
+	"$PATCH_HASH" "$DATABASE_PATCH_HASH" "$ASSEMBLY_HASH" | sha256sum | cut -c1-16)"
 CACHE_DIR="$PROJECT_ROOT/.cache/daed-source/$CACHE_ID"
 ARCHIVE="$CACHE_DIR/$SOURCE_NAME"
 MANIFEST="$CACHE_DIR/assembly-manifest.json"
@@ -71,6 +72,7 @@ cache_manifest() {
 		--pin "OUTBOUND_COMMIT=$OUTBOUND_COMMIT" \
 		--pin "QUICGO_BASE_COMMIT=$QUICGO_BASE_COMMIT" \
 		--pin "WEB_PATCH_SHA256=$PATCH_HASH" \
+		--pin "DATABASE_PATCH_SHA256=$DATABASE_PATCH_HASH" \
 		--pin "ASSEMBLY_SCRIPT_SHA256=$ASSEMBLY_HASH" \
 		"$@"
 }
@@ -97,6 +99,7 @@ else
 	fetch_at https://github.com/kenzok8/quic-go "$OUT/quic-go" "$QUICGO_BASE_COMMIT"
 	git -C "$OUT/quic-go" -c user.name=ci -c user.email=ci@local \
 		am "$DAEDE_ROOT"/ci/patches/quic-go/*.patch
+	python3 "$PROJECT_ROOT/scripts/patch_daed_database.py" "$OUT"
 
 	(
 		cd "$OUT/wing/dae-core"

@@ -3,19 +3,17 @@ set -eu
 ATHENA_LIBDIR="${ATHENA_LIBDIR:-/usr/lib/athena}"
 . "$ATHENA_LIBDIR/common.sh"
 . "$ATHENA_LIBDIR/backup.sh"
-. "$ATHENA_LIBDIR/templates.sh"
 . "$ATHENA_LIBDIR/checks.sh"
 
 state_file="$(athena_root /var/lib/athena/setup-state)"
 state_get() { [ -r "$state_file" ] && sed -n "s/^$1=//p" "$state_file" | tail -n 1 || true; }
 state_write() {
-	next="$1"; backup="${2:-$(state_get BACKUP_ID)}"; hash="${3:-$(state_get GENERATED_SHA256)}"
+	next="$1"; backup="${2:-$(state_get BACKUP_ID)}"
 	mkdir -p "$(dirname "$state_file")"
 	{
 		printf 'STATE=%s\n' "$next"
 		printf 'BACKUP_ID=%s\n' "$backup"
 		printf 'PROFILE=stable\n'
-		printf 'GENERATED_SHA256=%s\n' "$hash"
 		printf 'UPDATED_AT=%s\n' "$(date -Iseconds 2>/dev/null || date)"
 	} | athena_atomic_write /var/lib/athena/setup-state
 }
@@ -24,7 +22,7 @@ preflight() {
 	[ -r "$(athena_root /etc/config/athena)" ] || athena_die "Athena configuration is missing."
 	echo "PASS: Athena configuration"
 	echo "PASS: safe LAN target 192.168.50.1"
-	echo "INFO: DAED remains disabled until templates are imported"
+	echo "INFO: DAED remains disabled by safe default"
 }
 
 case "${1:-}" in
@@ -45,33 +43,8 @@ if [ "$current" = new ] || [ "$current" = checked ]; then
 	current=backed_up
 fi
 
-if [ "$current" = backed_up ]; then
-	proxy="${ATHENA_PROXY_GROUP:-proxy}"
-	node="${ATHENA_NODE_HOSTNAME:-node.example.com}"
-	ips="${ATHENA_NODE_IPS:-203.0.113.10}"
-	macs="${ATHENA_GAME_MACS:-}"
-	output="$(athena_root /etc/athena/generated)"
-	athena_render_templates "$output" "$proxy" "$node" "$ips" "$macs"
-	hash="$(find "$output" -type f -exec "${ATHENA_SHA256_CMD:-sha256sum}" {} \; 2>/dev/null | "${ATHENA_SHA256_CMD:-sha256sum}" | awk '{print $1}')"
-	state_write awaiting_import "$(state_get BACKUP_ID)" "$hash"
-	current=awaiting_import
-fi
-
-if [ "$current" = awaiting_import ]; then
-	cat <<'EOF'
-Templates are ready in /etc/athena/generated.
-Open Services -> DAED Panel. Import global.dae, dns.dae, then routing.dae.
-Select your proxy group and start DAED. This tool never edits wing.db.
-EOF
-	if [ "${ATHENA_NONINTERACTIVE:-0}" != 1 ]; then
-		printf 'Press Enter after the import is complete (Ctrl-C to resume later): '
-		read -r _
-	fi
-	state_write validated
-fi
-
 if command -v athena-runtime >/dev/null 2>&1; then athena-runtime apply; fi
-athena_run_checks
+athena_run_checks strict
 if [ "$ATHENA_HEALTH_FAILS" -gt 0 ]; then
 	echo "Critical health checks failed. Run athena-rollback $(state_get BACKUP_ID)." >&2
 	exit 2

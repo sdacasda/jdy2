@@ -1,0 +1,7 @@
+{
+  "source": "https://github.com/daeuniverse/dae-wing/tree/dc503088945812c11235b35362d2bfa1a4c3bdf0",
+  "files": {
+    "wing/db/db.go": "3dbe0c30c5592a0dbceeff753c41bb2f2afe1728fe75b0b66a3567d0ef4b4b14",
+    "wing/graphql/mutation.go": "0dceee4f53d78f1a85fe53b0e80a887c0e1112bc101aa1434b1ebe0e2e0d67e5"
+  }
+}

@@ -19,5 +19,12 @@ for test_file in "$PROJECT_ROOT"/tests/runtime/test_*.sh; do
 	fi
 done
 
+python_test="$PROJECT_ROOT/scripts/tests/test_patch_daed_database.py"
+count=$((count + 1))
+printf 'RUN %s\n' "${python_test##*/}"
+if ! "${PYTHON:-python3}" "$python_test"; then
+	failures=$((failures + 1))
+fi
+
 printf 'Runtime tests: %s run, %s failed\n' "$count" "$failures"
 [ "$failures" -eq 0 ]

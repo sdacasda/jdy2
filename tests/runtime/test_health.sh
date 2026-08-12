@@ -29,6 +29,23 @@ for id in daed_enabled daed_process daed_api; do
 	printf '%s' "$output" | grep -q "\"id\":\"$id\",\"severity\":\"advisory\",\"status\":\"WARN\""
 done
 
+export ATHENA_DAED_ENABLED=1
+export ATHENA_DAED_RUNNING=0
+export ATHENA_DAED_API_REACHABLE=0
+printf '0\n' >"$ROOT/sys/kernel/debug/ecm/front_end_ipv4_stop"
+printf '0\n' >"$ROOT/sys/kernel/debug/ecm/front_end_ipv6_stop"
+set +e
+normal_output="$(sh "$BIN" --json)"
+normal_code=$?
+polluted_output="$(ATHENA_HEALTH_STRICT=1 sh "$BIN" --json)"
+polluted_code=$?
+set -e
+[ "$normal_code" -eq 0 ]
+[ "$polluted_code" -eq 0 ]
+[ "$normal_output" = "$polluted_output" ]
+
+printf '1\n' >"$ROOT/sys/kernel/debug/ecm/front_end_ipv4_stop"
+printf '1\n' >"$ROOT/sys/kernel/debug/ecm/front_end_ipv6_stop"
 printf 'STATE=complete\n' >"$ROOT/var/lib/athena/setup-state"
 export ATHENA_DAED_ENABLED=1
 export ATHENA_DAED_RUNNING=1

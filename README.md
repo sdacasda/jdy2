@@ -1,4 +1,4 @@
-# Athena AX6600 DAED v19.0.0-rc1
+# Athena AX6600 DAED v19.0.0-rc2
 
 面向京东云雅典娜 RE-CS-02 的稳定优先 OpenWrt 固件构建项目。一次 GitHub Actions 构建同时生成 initramfs 测试镜像和 sysupgrade 镜像；必须先完成内存启动验证，才能考虑持久刷写。
 
@@ -36,7 +36,7 @@ DAED 面板： LuCI → 服务 → Athena 优化 → DAED 面板
 端口 2023：仅路由器回环地址可访问
 ```
 
-DAED 默认关闭是安全发布策略，不是故障。导入节点和模板后再启动。
+DAED 默认关闭；请从 LuCI 的“服务 → Athena 优化 → DAED 面板”临时启动 DAED，再在原生 UI 中导入或添加节点并完成配置，验证可用后如需开机启动，请通过 SSH 执行 `/etc/init.d/daed enable`；如需取消开机启动，执行 `/etc/init.d/daed disable`。不需要导入模板。
 
 ## 构建与测试
 
@@ -91,6 +91,6 @@ athena-iot setup
 athena-iot diagnose
 ```
 
-更多说明见 [构建](docs/BUILD.md)、[刷写](docs/FLASH.md)、[首次设置](docs/SETUP.md)、[Web 恢复](docs/WEB_RECOVERY.md)、[IoT Wi-Fi](docs/IOT_WIFI.md) 和 [恢复](docs/RECOVERY.md)。
+更多说明见 [构建](docs/BUILD.md)、[刷写](docs/FLASH.md)、[首次设置](docs/SETUP.md)、[Web 恢复](docs/WEB_RECOVERY.md)、[IoT Wi-Fi](docs/IOT_WIFI.md)、[DAED 登录恢复](docs/DAED_LOGIN_RECOVERY.md) 和 [恢复](docs/RECOVERY.md)。
 
 > 刷机有风险。正式刷写前必须备份 ART/EEPROM、MAC、校准分区和现有固件，并完成 initramfs 真机验证。

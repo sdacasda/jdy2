@@ -69,6 +69,14 @@ class WorkflowTests(unittest.TestCase):
   self.assertLess(assemble,download)
   self.assertIn("daed-source-provenance",t)
 
+ def test_node_is_installed_before_unittest_discovery(self):
+  t=(ROOT/".github/workflows/build-athena-v19.yml").read_text(encoding="utf-8")
+  setup_node=t.index("actions/setup-node@v5")
+  validate=t.index("name: Validate source project")
+  discovery=t.index("python3 -m unittest discover -s tests")
+  self.assertLess(setup_node,validate)
+  self.assertLess(setup_node,discovery)
+
  def test_setup_go_does_not_probe_for_a_root_go_module(self):
   t=(ROOT/".github/workflows/build-athena-v19.yml").read_text(encoding="utf-8")
   self.assertRegex(

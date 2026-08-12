@@ -1,16 +1,58 @@
 'use strict';
 'require view';
 'require rpc';
+'require ui';
 
 var callStatus = rpc.declare({ object: 'athena', method: 'status' });
 var callDaedStart = rpc.declare({ object: 'athena', method: 'daed_start' });
 var callDaedStop = rpc.declare({ object: 'athena', method: 'daed_stop' });
+var callDaedResetPassword = rpc.declare({ object: 'athena', method: 'daed_reset_password', params: [ 'confirmation' ] });
+var DAED_RESET_CONFIRMATION = 'RESET DAED PASSWORD';
 
 function statusChip(label, active) {
 	return E('div', { class: 'athena-daed-chip ' + (active ? 'is-ok' : 'is-off') }, [
 		E('span', { class: 'athena-daed-dot' }),
 		E('span', {}, label),
 		E('strong', {}, active ? _('正常') : _('未就绪'))
+	]);
+}
+
+function clearDaedRecoveryCredentials(credentials, credentialNode) {
+	credentials.username = '';
+	credentials.password = '';
+	credentialNode.textContent = '';
+}
+
+function showDaedRecoveryFailure(result) {
+	var message = result && result.error ? result.error : _('DAED password recovery failed.');
+	var contents = [ E('p', {}, message) ];
+	if (result && result.backup)
+		contents.push(E('p', {}, _('Backup: ') + result.backup));
+	contents.push(E('div', { class: 'right' }, [
+		E('button', { class: 'btn cbi-button-neutral', click: ui.hideModal }, _('Close'))
+	]));
+	ui.showModal(_('DAED password recovery failed'), contents);
+}
+
+function showDaedRecoverySuccess(result) {
+	var credentials = { username: result.username || '', password: result.password || '' };
+	result.username = '';
+	result.password = '';
+	var credentialNode = E('div', { class: 'athena-daed-card' }, [
+		E('p', {}, _('Username: ') + credentials.username),
+		E('p', {}, _('Generated password: ') + credentials.password),
+		E('p', {}, _('Backup: ') + (result.backup || ''))
+	]);
+	var close = function() {
+		clearDaedRecoveryCredentials(credentials, credentialNode);
+		ui.hideModal();
+	};
+	ui.showModal(_('DAED password reset complete'), [
+		E('p', {}, _('Save these credentials now. They will be cleared when this dialog is closed.')),
+		credentialNode,
+		E('div', { class: 'right' }, [
+			E('button', { class: 'btn cbi-button-neutral', click: close }, _('Close'))
+		])
 	]);
 }
 
@@ -31,6 +73,39 @@ return view.extend({
 
 	handleRefresh: function() {
 		window.location.reload();
+	},
+
+	handleResetPassword: function() {
+		var input = E('input', { type: 'text', class: 'cbi-input-text', placeholder: DAED_RESET_CONFIRMATION });
+		var reset = E('button', { class: 'btn cbi-button-negative', disabled: true }, _('Reset password'));
+		var close = function() { input.value = ''; ui.hideModal(); };
+		reset.addEventListener('click', function() {
+			if (input.value !== DAED_RESET_CONFIRMATION)
+				return;
+			var request = callDaedResetPassword(input.value);
+			input.value = '';
+			reset.disabled = true;
+			request.then(function(result) {
+				if (result && result.ok)
+					showDaedRecoverySuccess(result);
+				else
+					showDaedRecoveryFailure(result);
+			}).catch(function() {
+				input.value = '';
+				showDaedRecoveryFailure(null);
+			});
+		});
+		input.addEventListener('input', function() {
+			reset.disabled = input.value !== DAED_RESET_CONFIRMATION;
+		});
+		ui.showModal(_('Reset DAED password'), [
+			E('p', {}, _('This action resets the DAED password and creates a backup first. Type the exact phrase to continue.')),
+			input,
+			E('div', { class: 'right' }, [
+				E('button', { class: 'btn cbi-button-neutral', click: close }, _('Cancel')),
+				reset
+			])
+		]);
 	},
 
 	render: function(s) {
@@ -55,6 +130,7 @@ return view.extend({
 		]);
 
 		page.appendChild(E('div', { class: 'athena-daed-actions' }, [
+			E('button', { class: 'btn cbi-button-negative', click: this.handleResetPassword.bind(this) }, _('Reset DAED password')),
 			s.daed_running
 				? E('button', { class: 'btn cbi-button-negative', click: this.handleStop.bind(this) }, _('停止 DAED'))
 				: E('button', { class: 'btn cbi-button-positive important', click: this.handleStart.bind(this) }, _('启动 DAED')),

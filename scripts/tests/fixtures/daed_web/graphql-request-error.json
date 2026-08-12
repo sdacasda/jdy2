@@ -1,0 +1,17 @@
+{
+  "response": {
+    "errors": [
+      { "message": "Invalid username or password" }
+    ]
+  },
+  "request": {
+    "query": "query Token($username: String!, $password: String!) { token(username: $username, password: $password) }",
+    "variables": {
+      "username": "admin",
+      "password": "SENTINEL_DAED_PASSWORD_DO_NOT_RENDER"
+    },
+    "headers": {
+      "authorization": "Bearer SENTINEL_DAED_TOKEN"
+    }
+  }
+}

@@ -19,6 +19,13 @@ printf '%s' "$output" | grep -q '"recovery_url":"http://192.168.50.1:8080/"'
 listing="$(sh "$SCRIPT" list)"
 printf '%s' "$listing" | grep -q '"daed_start"'
 printf '%s' "$listing" | grep -q '"daed_stop"'
+! printf '%s' "$listing" | grep -q '"templates"'
+set +e
+template_output="$(sh "$SCRIPT" call templates 2>&1)"
+template_code=$?
+set -e
+[ "$template_code" -eq 1 ]
+printf '%s' "$template_output" | grep -q '"error":"unknown method"'
 
 # A valid GraphQL error response still proves that the management API is
 # reachable.  DAED returns application errors (for example, an empty proxy

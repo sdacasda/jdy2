@@ -2,10 +2,10 @@
   "luci-app-athena": {
     "description": "Athena status and safe management",
     "read": {
-      "ubus": { "athena": [ "status", "dashboard", "health", "templates", "backups" ] }
+      "ubus": { "athena": [ "status", "dashboard", "health", "backups" ] }
     },
     "write": {
-      "ubus": { "athena": [ "runtime_apply", "rollback", "daed_start", "daed_stop" ] }
+      "ubus": { "athena": [ "runtime_apply", "rollback", "daed_start", "daed_stop", "daed_reset_password" ] }
     }
   }
 }

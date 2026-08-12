@@ -39,6 +39,9 @@ jobs:
           chmod +x packages/athena-runtime/files/etc/init.d/athena-runtime
           chmod +x packages/athena-runtime/files/usr/libexec/rpcd/athena
           chmod +x packages/luci-app-athena/root/etc/uci-defaults/95-athena-web
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
       - name: Validate source project
         id: validate
         run: |
@@ -67,14 +70,11 @@ jobs:
         with:
           go-version: "1.26.0"
           cache: false
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 24
       - uses: actions/cache/restore@v5
         id: daedcache
         with:
           path: .cache/daed-source
-          key: daed-source-${{ runner.os }}-${{ hashFiles('SOURCES.lock.json', 'patches/daed/**', 'scripts/assemble_daed_source.sh', 'scripts/install_daed_source.py', 'scripts/install_daed_web.py', 'scripts/verify_daed_source_cache.py', 'scripts/patch_daed_web.py') }}
+          key: daed-source-${{ runner.os }}-${{ hashFiles('SOURCES.lock.json', 'patches/daed/**', 'scripts/assemble_daed_source.sh', 'scripts/install_daed_source.py', 'scripts/install_daed_web.py', 'scripts/verify_daed_source_cache.py', 'scripts/patch_daed_web.py', 'scripts/patch_daed_database.py') }}
       - name: Clone immutable LiBwrt source
         run: |
           REPO="$(jq -r '.libwrt.repository' SOURCES.lock.json)"
@@ -137,7 +137,7 @@ jobs:
         continue-on-error: true
         with:
           path: .cache/daed-source
-          key: daed-source-${{ runner.os }}-${{ hashFiles('SOURCES.lock.json', 'patches/daed/**', 'scripts/assemble_daed_source.sh', 'scripts/install_daed_source.py', 'scripts/install_daed_web.py', 'scripts/verify_daed_source_cache.py', 'scripts/patch_daed_web.py') }}
+          key: daed-source-${{ runner.os }}-${{ hashFiles('SOURCES.lock.json', 'patches/daed/**', 'scripts/assemble_daed_source.sh', 'scripts/install_daed_source.py', 'scripts/install_daed_web.py', 'scripts/verify_daed_source_cache.py', 'scripts/patch_daed_web.py', 'scripts/patch_daed_database.py') }}
       - name: Build both images
         id: compile
         continue-on-error: true

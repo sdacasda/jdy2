@@ -40,7 +40,7 @@ def main() -> int:
             errors.append(f"invalid PROJECT.json: {exc}")
         else:
             expectations = {
-                "version": "v19.0.0-rc1",
+                "version": "v19.0.0-rc2",
                 "target": "qualcommax/ipq60xx",
                 "device": "jdcloud_re-cs-02",
                 "lan_address": "192.168.50.1",

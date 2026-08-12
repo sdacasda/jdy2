@@ -1,5 +1,5 @@
 #!/bin/sh
-echo "Athena AX6600 DAED v19.0.0-rc1"
+echo "Athena AX6600 DAED v19.0.0-rc2"
 [ ! -r /etc/athena-release ] || cat /etc/athena-release
 echo "LAN: $(uci -q get athena.main.lan_ip 2>/dev/null || echo 192.168.50.1)"
 echo "Profile: $(uci -q get athena.main.profile 2>/dev/null || echo stable)"

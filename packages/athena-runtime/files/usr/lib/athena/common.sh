@@ -90,7 +90,27 @@ athena_is_hostname() {
 }
 
 athena_json_escape() {
-	printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'
+	# Work byte-wise: printable UTF-8 passes through unchanged while every JSON
+	# control character is encoded without relying on a non-BusyBox runtime.
+	if [ "$#" -gt 0 ]; then
+		printf '%s' "$1"
+	else
+		cat
+	fi | od -An -v -t u1 | LC_ALL=C awk '
+		{
+			for (i = 1; i <= NF; i++) {
+				b = $i
+				if (b == 34) printf "\\\""
+				else if (b == 92) printf "\\\\"
+				else if (b == 8) printf "\\b"
+				else if (b == 9) printf "\\t"
+				else if (b == 10) printf "\\n"
+				else if (b == 12) printf "\\f"
+				else if (b == 13) printf "\\r"
+				else if (b < 32) printf "\\u%04x", b
+				else printf "%c", b
+			}
+		}'
 }
 
 athena_daed_graphql_reachable() {

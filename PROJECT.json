@@ -1,6 +1,6 @@
 {
   "name": "Athena AX6600 DAED",
-  "version": "v19.0.0-rc1",
+  "version": "v19.0.0-rc2",
   "device": "jdcloud_re-cs-02",
   "target": "qualcommax/ipq60xx",
   "kernel_series": "6.12",
