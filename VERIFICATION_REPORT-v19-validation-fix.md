@@ -4,14 +4,21 @@ Date: 2026-08-13
 
 ## Artifact diagnosis
 
-- Inspected `Athena-AX6600-v19-18-test.zip`.
-- Confirmed `validate=failure` and that later build stages were skipped.
-- Confirmed the Artifact contains only early diagnostic files; no firmware was
-  built, so run 18 must not be flashed.
+- Inspected `Athena-AX6600-v19-19-test.zip` and its preserved
+  `diagnostics/source-validation/source-validation.log`.
+- Confirmed the only runtime failures were `test_common.sh` and
+  `test_daed_recovery.sh`, both caused by `PYTHON: set PYTHON`.
+- Compared those files and the runner against the supplied working v19.16
+  source ZIP. The Python-backed assertions are new after v19.16, while the
+  caller still did not export `PYTHON`.
+- Confirmed validation failed before dependency installation or firmware
+  compilation, so run 19 contains no flashable image.
 
 ## Verification performed
 
-- Python discovery: 125 tests passed, 1 environment-dependent Node behavior
+- New unset-`PYTHON` behavioral regression: failed before the fix and passed
+  after the runner began discovering/exporting Python.
+- Python discovery: 126 tests passed, 1 environment-dependent Node behavior
   test skipped by discovery.
 - Direct Node dashboard test: passed.
 - Runtime runner: 11 tests run, 0 failed.
@@ -28,8 +35,6 @@ Date: 2026-08-13
 ## Remaining external verification
 
 The complete OpenWrt firmware build is intentionally performed by GitHub
-Actions.  A new Actions run is still required to prove the Ubuntu runner and
-the multi-hour firmware compilation.  If validation fails again, the Artifact
-will now include the complete validation transcript and a final list of exact
-failed tests.
-
+Actions. A new Actions run is still required to prove the Ubuntu runner and
+the multi-hour firmware compilation. If validation fails again, the Artifact
+will preserve the complete validation transcript and the exact failed tests.

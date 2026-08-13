@@ -3,6 +3,17 @@ set -u
 
 PROJECT_ROOT="${PROJECT_ROOT:-$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)}"
 export PROJECT_ROOT
+if [ -z "${PYTHON:-}" ]; then
+	if command -v python3 >/dev/null 2>&1; then
+		PYTHON="$(command -v python3)"
+	elif command -v python >/dev/null 2>&1; then
+		PYTHON="$(command -v python)"
+	else
+		printf '%s\n' 'FAIL: Python 3 is unavailable for runtime tests' >&2
+		exit 1
+	fi
+	export PYTHON
+fi
 if ! command -v sha256sum >/dev/null 2>&1 && [ -n "${PYTHON:-}" ]; then
 	ATHENA_SHA256_CMD="$PROJECT_ROOT/tests/host-bin/sha256sum"
 	export ATHENA_SHA256_CMD
