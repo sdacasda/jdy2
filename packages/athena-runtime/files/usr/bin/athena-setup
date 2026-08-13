@@ -7,12 +7,15 @@ ATHENA_LIBDIR="${ATHENA_LIBDIR:-/usr/lib/athena}"
 
 state_file="$(athena_root /var/lib/athena/setup-state)"
 state_get() { [ -r "$state_file" ] && sed -n "s/^$1=//p" "$state_file" | tail -n 1 || true; }
+phases=""
 state_write() {
 	next="$1"; backup="${2:-$(state_get BACKUP_ID)}"
+	if [ -n "$phases" ]; then phases="$phases,$next"; else phases="$next"; fi
 	mkdir -p "$(dirname "$state_file")"
 	{
 		printf 'STATE=%s\n' "$next"
 		printf 'BACKUP_ID=%s\n' "$backup"
+		printf 'PHASES=%s\n' "$phases"
 		printf 'PROFILE=stable\n'
 		printf 'UPDATED_AT=%s\n' "$(date -Iseconds 2>/dev/null || date)"
 	} | athena_atomic_write /var/lib/athena/setup-state
@@ -35,6 +38,7 @@ athena_lock setup || athena_die "Another setup operation is running."
 trap athena_unlock EXIT INT TERM
 preflight
 current="$(state_get STATE)"; [ -n "$current" ] || current=new
+state_write preflight
 
 if [ "$current" = new ] || [ "$current" = checked ]; then
 	backup_dir="$(athena_backup_create setup)"
@@ -44,10 +48,12 @@ if [ "$current" = new ] || [ "$current" = checked ]; then
 fi
 
 if command -v athena-runtime >/dev/null 2>&1; then athena-runtime apply; fi
+state_write runtime_applied
 athena_run_checks strict
 if [ "$ATHENA_HEALTH_FAILS" -gt 0 ]; then
 	echo "Critical health checks failed. Run athena-rollback $(state_get BACKUP_ID)." >&2
 	exit 2
 fi
+state_write validated
 state_write complete
 echo "Athena v19 setup complete."

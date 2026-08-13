@@ -35,12 +35,57 @@ def packageinfo_version(path: pathlib.Path) -> str:
     raise ValueError("registered package metadata has no daed package")
 
 
+def read_json_record(path: pathlib.Path, name: str) -> dict[str, object]:
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"cannot read {name}: {exc}") from exc
+    if not isinstance(record, dict):
+        raise ValueError(f"{name} must be a JSON object")
+    return record
+
+
+def verify_source_provenance(args: argparse.Namespace) -> None:
+    records = (args.assembly_manifest, args.archive_provenance, args.static_web_provenance)
+    if not any(records):
+        return
+    if not all(records):
+        raise ValueError("assembly, archive, and static-Web provenance must be supplied together")
+    assembly = read_json_record(args.assembly_manifest, "assembly manifest")
+    archive = read_json_record(args.archive_provenance, "archive provenance")
+    static_web = read_json_record(args.static_web_provenance, "static-Web provenance")
+    pins = assembly.get("pins")
+    if not isinstance(pins, dict):
+        raise ValueError("assembly manifest has no immutable pins")
+    for key in ("WEB_PATCH_SHA256", "DATABASE_PATCH_SHA256"):
+        value = pins.get(key)
+        if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value):
+            raise ValueError(f"assembly manifest has invalid {key}")
+    digest = assembly.get("sha256")
+    size = assembly.get("size")
+    source_root = assembly.get("source_root")
+    if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+        raise ValueError("assembly manifest has invalid archive digest")
+    if not isinstance(size, int) or size <= 0 or not isinstance(source_root, str) or not source_root:
+        raise ValueError("assembly manifest has incomplete archive provenance")
+    if archive.get("sha256") != digest or archive.get("size") != size:
+        raise ValueError("installed archive provenance does not match assembly manifest")
+    if static_web.get("archive_sha256") != digest or static_web.get("root") != source_root:
+        raise ValueError("static-Web provenance does not match assembled archive")
+    static_digest = static_web.get("tree_sha256")
+    if not isinstance(static_digest, str) or not re.fullmatch(r"[0-9a-f]{64}", static_digest):
+        raise ValueError("static-Web provenance has invalid tree digest")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--packageinfo", type=pathlib.Path, required=True)
     parser.add_argument("--lock", type=pathlib.Path, required=True)
     parser.add_argument("--makefile", type=pathlib.Path, required=True)
     parser.add_argument("--build-log", type=pathlib.Path)
+    parser.add_argument("--assembly-manifest", type=pathlib.Path)
+    parser.add_argument("--archive-provenance", type=pathlib.Path)
+    parser.add_argument("--static-web-provenance", type=pathlib.Path)
     args = parser.parse_args()
 
     try:
@@ -48,6 +93,7 @@ def main() -> int:
         expected = lock["daede"]["package_version"]
         makefile = makefile_version(args.makefile)
         registered = packageinfo_version(args.packageinfo)
+        verify_source_provenance(args)
     except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
         print(f"FAIL: cannot verify DAED provenance: {exc}")
         return 1
@@ -72,7 +118,7 @@ def main() -> int:
             print("FAIL: build log does not prove package/custom/daed was compiled")
             return 1
 
-    print(f"PASS: immutable DAED {expected} is registered and selected")
+    print(f"PASS: immutable DAED {expected} is registered, source-bound, and selected")
     return 0
 
 

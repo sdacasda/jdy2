@@ -10,13 +10,17 @@ ROOT = Path(__file__).parents[1]
 
 
 class RuntimeRunnerTests(unittest.TestCase):
+    def _shell(self, name):
+        shell = shutil.which(name)
+        if shell is None and os.name == "nt":
+            candidate = Path(rf"D:\Git\bin\{name}.exe")
+            shell = str(candidate) if candidate.exists() else None
+        if shell is None:
+            self.skipTest(f"{name} is unavailable")
+        return shell
+
     def test_runner_discovers_and_exports_python_when_environment_is_unset(self):
-        bash = shutil.which("bash")
-        if bash is None and os.name == "nt":
-            candidate = Path(r"D:\Git\bin\bash.exe")
-            bash = str(candidate) if candidate.exists() else None
-        if bash is None:
-            self.skipTest("bash is unavailable")
+        bash = self._shell("bash")
 
         with tempfile.TemporaryDirectory() as tmp:
             project = Path(tmp)
@@ -60,22 +64,60 @@ class RuntimeRunnerTests(unittest.TestCase):
             0,
             msg=f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}",
         )
+        self.assertEqual(result.stdout.count("PASS: all runtime tests"), 1)
 
-    def test_host_tests_use_bash_and_report_failed_test_names(self):
-        runner = (ROOT / "scripts/test_runtime_scripts.sh").read_text(encoding="utf-8")
-        self.assertIn('test_shell="${ATHENA_RUNTIME_TEST_SHELL:-bash}"', runner)
-        self.assertIn('"$test_shell" "$test_file"', runner)
-        self.assertIn("Failed runtime tests:", runner)
+    def test_runner_stops_and_reports_the_first_failing_runtime_test(self):
+        bash = self._shell("bash")
 
-    def test_workflow_preserves_source_validation_log(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp)
+            (project / "scripts/tests").mkdir(parents=True)
+            (project / "tests/runtime").mkdir(parents=True)
+            shutil.copy2(
+                ROOT / "scripts/test_runtime_scripts.sh",
+                project / "scripts/test_runtime_scripts.sh",
+            )
+            (project / "tests/runtime/test_daed_recovery.sh").write_text(
+                "#!/bin/sh\nexit 1\n", encoding="utf-8"
+            )
+            (project / "tests/runtime/test_z_after_failure.sh").write_text(
+                "#!/bin/sh\necho should-not-run >&2\nexit 0\n", encoding="utf-8"
+            )
+            (project / "scripts/tests/test_patch_daed_database.py").write_text(
+                "raise SystemExit('should not run')\n", encoding="utf-8"
+            )
+
+            for test_shell in ("bash", "sh"):
+                result = subprocess.run(
+                    [
+                        bash,
+                        "-lc",
+                        'PYTHON=true PROJECT_ROOT="$PWD" ATHENA_RUNTIME_TEST_SHELL="'
+                        + test_shell
+                        + '" bash scripts/test_runtime_scripts.sh',
+                    ],
+                    cwd=project,
+                    text=True,
+                    capture_output=True,
+                    check=False,
+                )
+                output = result.stdout + result.stderr
+                with self.subTest(test_shell=test_shell):
+                    self.assertEqual(result.returncode, 1, msg=output)
+                    self.assertIn("FAIL: test_daed_recovery.sh", output)
+                    self.assertNotIn("PASS: all runtime tests", output)
+                    self.assertNotIn("should-not-run", output)
+
+    def test_workflow_records_validation_and_provenance_logs(self):
         workflow = (ROOT / ".github/workflows/build-athena-v19.yml").read_text(
             encoding="utf-8"
         )
         self.assertIn("source-validation/source-validation.log", workflow)
-        self.assertIn(
-            'cp -a source-validation "$OUTPUT/diagnostics/source-validation"',
-            workflow,
-        )
+        self.assertIn("daed-provenance/prebuild.txt", workflow)
+        self.assertIn("daed-provenance/postbuild.txt", workflow)
+        self.assertIn("daed-source-provenance/assembly.log", workflow)
+        self.assertIn("ATHENA_STEP_OUTCOMES", workflow)
+        self.assertIn("bash scripts/collect_output.sh", workflow)
 
     def test_production_shell_sources_are_syntax_checked_with_dash(self):
         runner = (ROOT / "scripts/test_runtime_scripts.sh").read_text(encoding="utf-8")

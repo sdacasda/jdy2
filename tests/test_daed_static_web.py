@@ -11,6 +11,18 @@ import unittest
 ROOT = Path(__file__).parents[1]
 INSTALLER = ROOT / "scripts/install_daed_web.py"
 SOURCE_ROOT = "daed-2026.07.26"
+FORBIDDEN_WEB_LEAK_TOKENS = (
+    b"SENTINEL_DAED_PASSWORD_DO_NOT_RENDER",
+    b"toast.error(err.message)",
+    b"toast.error((err as Error).message)",
+    b"JSON.stringify(error)",
+    b"JSON.stringify(err)",
+    b"console.error",
+    b"console.warn",
+    b"request.variables",
+    b"request.body",
+    b"ClientError",
+)
 
 
 class DaedStaticWebTests(unittest.TestCase):
@@ -213,6 +225,35 @@ class DaedStaticWebTests(unittest.TestCase):
                 root / "destination",
                 root / "provenance.json",
                 "same-origin GraphQL endpoint",
+            )
+
+    def test_rejects_credentials_and_error_leaks_in_browser_assets(self):
+        for token in FORBIDDEN_WEB_LEAK_TOKENS:
+            with self.subTest(token=token), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                files = self._files()
+                files["assets/index-abc.js"] += b"\n// " + token
+                archive = root / "source.tar.gz"
+                self._write_archive(archive, files=files)
+                self._assert_rejected_without_replacing_destination(
+                    archive,
+                    root / "destination",
+                    root / "provenance.json",
+                    "unsafe login error content",
+                )
+
+    def test_rejects_error_leaks_outside_javascript(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            files = self._files()
+            files["assets/index-def.css"] += b"\n/* SENTINEL_DAED_PASSWORD_DO_NOT_RENDER */"
+            archive = root / "source.tar.gz"
+            self._write_archive(archive, files=files)
+            self._assert_rejected_without_replacing_destination(
+                archive,
+                root / "destination",
+                root / "provenance.json",
+                "unsafe login error content",
             )
 
     def test_rejects_path_traversal_member(self):

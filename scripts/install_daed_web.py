@@ -23,6 +23,17 @@ FORBIDDEN_BROWSER_ENDPOINTS = (
     b"127.0.0.1:2023",
     b"192.168.50.1:2023",
 )
+FORBIDDEN_WEB_LEAK_TOKENS = (
+    b"SENTINEL_DAED_PASSWORD_DO_NOT_RENDER",
+    b"toast.error(err.message)",
+    b"toast.error((err as Error).message)",
+    b"JSON.stringify(error)",
+    b"JSON.stringify(err)",
+    b"console.",
+    b"request.variables",
+    b"request.body",
+    b"ClientError",
+)
 MAX_STATIC_FILE_SIZE = 64 * 1024 * 1024
 ASSET_REFERENCE = re.compile(r"(?:src|href)=[\"']([^\"']+)[\"']", re.I)
 IMAGE_SUFFIXES = {".avif", ".gif", ".ico", ".jpeg", ".jpg", ".png", ".svg", ".webp"}
@@ -166,6 +177,9 @@ def inspect_archive(archive: Path) -> dict[str, object]:
         raise RuntimeError("DAED static Web contains a browser-visible DAED port")
     if GRAPHQL_ENDPOINT not in browser_assets:
         raise RuntimeError("DAED static Web is missing the same-origin GraphQL endpoint")
+    shipped_assets = b"\n".join(payloads.values())
+    if any(value in shipped_assets for value in FORBIDDEN_WEB_LEAK_TOKENS):
+        raise RuntimeError("DAED static Web contains unsafe login error content")
 
     return {
         "record": _tree_record(archive, root, payloads),

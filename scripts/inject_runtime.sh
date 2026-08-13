@@ -42,6 +42,6 @@ cat >"$FILES/www/diag.html" <<'EOF'
 <h1>Athena AX6600 v19</h1>
 <p>Normal LuCI: <a href="http://192.168.50.1/">192.168.50.1</a></p>
 <p>Recovery LuCI: <a href="http://192.168.50.1:8080/">192.168.50.1:8080</a></p>
-<p>DAED is disabled by default. Run <code>athena-setup</code> after importing a node.</p>
+<p>DAED is disabled by default. Add subscriptions and nodes in LuCI through Services &rarr; Athena &rarr; DAED Panel.</p>
 <p>Optional IoT network: <code>athena-iot setup</code>.</p>
 EOF

@@ -104,13 +104,16 @@ class DaedDatabasePatchTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
             patched_db = db_path.read_text(encoding="utf-8")
-            self.assertIn("sqlDB.SetMaxOpenConns(1)", patched_db)
-            self.assertIn("sqlDB.SetMaxIdleConns(1)", patched_db)
-            self.assertIn('sqlDB.Exec("PRAGMA busy_timeout = 10000")', patched_db)
-
-            self.assert_create_user_transaction_safety(
-                mutation_path.read_text(encoding="utf-8")
+            self.assertEqual(patched_db.count("sqlDB.SetMaxOpenConns(1)"), 1)
+            self.assertEqual(patched_db.count("sqlDB.SetMaxIdleConns(1)"), 1)
+            self.assertEqual(
+                patched_db.count('sqlDB.Exec("PRAGMA busy_timeout = 10000")'), 1
             )
+
+            create_user = mutation_path.read_text(encoding="utf-8")
+            self.assertIn("if err = tx.Error; err != nil", create_user)
+            self.assertIn("err = tx.Commit().Error", create_user)
+            self.assert_create_user_transaction_safety(create_user)
 
     def test_second_run_is_idempotent(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -142,6 +145,22 @@ class DaedDatabasePatchTests(unittest.TestCase):
             result = self.run_patcher(root)
 
             self.assertNotEqual(result.returncode, 0)
+            self.assertEqual((db_path.read_bytes(), mutation_path.read_bytes()), original)
+
+    def test_partially_patched_source_fails_closed_without_writing_either_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            db_path, mutation_path = self.copy_fixture(root)
+            original_mutation = mutation_path.read_bytes()
+            patched = self.run_patcher(root)
+            self.assertEqual(patched.returncode, 0, patched.stdout + patched.stderr)
+            mutation_path.write_bytes(original_mutation)
+            original = (db_path.read_bytes(), mutation_path.read_bytes())
+
+            result = self.run_patcher(root)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("partially database-patched", result.stderr)
             self.assertEqual((db_path.read_bytes(), mutation_path.read_bytes()), original)
 
     def test_create_user_commit_check_cannot_be_satisfied_by_another_function(self):

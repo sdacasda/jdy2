@@ -1,5 +1,0 @@
-# Xbox content and update distribution
-assets1.xboxlive.com
-assets2.xboxlive.com
-xboxone.loris.llnwd.net
-dl.delivery.mp.microsoft.com

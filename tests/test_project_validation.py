@@ -30,6 +30,44 @@ def run(script: str, root: pathlib.Path, *extra: str) -> subprocess.CompletedPro
 
 
 class ProjectValidationTests(unittest.TestCase):
+    def test_public_release_tree_does_not_require_internal_superpowers_docs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            for relative in ("PROJECT.json", "SOURCES.lock.json"):
+                shutil.copyfile(ROOT / relative, root / relative)
+
+            result = run("scripts/verify_project.py", root, "--allow-incomplete")
+
+            self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_ignores_local_superpowers_but_scans_production_content(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            for relative in (
+                "PROJECT.json",
+                "SOURCES.lock.json",
+                "docs/superpowers/specs/2026-07-25-athena-v19-design.md",
+                "docs/superpowers/plans/2026-07-25-athena-v19-implementation.md",
+            ):
+                destination = root / relative
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(ROOT / relative, destination)
+
+            invalid = b"{{LOCAL_PLACEHOLDER}}\r\n<<<<<<< local\r\n=======\r\n>>>>>>> review\r\n"
+            local_review = root / ".superpowers" / "sdd" / "review.diff"
+            local_review.parent.mkdir(parents=True)
+            local_review.write_bytes(invalid)
+
+            ignored = run("scripts/verify_project.py", root, "--allow-incomplete")
+            self.assertEqual(ignored.returncode, 0, ignored.stdout)
+
+            production = root / "packages" / "review.diff"
+            production.parent.mkdir(parents=True)
+            production.write_bytes(invalid)
+            rejected = run("scripts/verify_project.py", root, "--allow-incomplete")
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("packages", rejected.stdout)
+
     def test_lock_rejects_moving_ref(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
@@ -55,6 +93,19 @@ class ProjectValidationTests(unittest.TestCase):
     def test_current_repository_validates(self) -> None:
         result = run("scripts/verify_project.py", ROOT, "--allow-incomplete")
         self.assertEqual(result.returncode, 0, result.stdout)
+
+    def test_rejects_retired_template_token_in_production_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            retired = root / "packages/athena-runtime/Makefile"
+            retired.parent.mkdir(parents=True)
+            retired.write_text("/usr/share/athena/templates\n", encoding="utf-8")
+
+            result = run("scripts/verify_project.py", root, "--allow-incomplete")
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("retired template reference", result.stdout)
+            self.assertIn("packages/athena-runtime/Makefile", result.stdout)
 
     def test_daed_lock_declares_expected_package_version(self) -> None:
         lock = json.loads((ROOT / "SOURCES.lock.json").read_text(encoding="utf-8"))

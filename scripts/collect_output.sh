@@ -6,13 +6,39 @@ INSPECTION="${3:-}"
 BUILD_LOG="${4:-}"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TARGET="$TOPDIR/bin/targets/qualcommax/ipq60xx"
-mkdir -p "$OUTPUT"/{firmware,metadata,diagnostics,tools,docs}
+STEP_OUTCOMES="${ATHENA_STEP_OUTCOMES:-}"
+mkdir -p "$OUTPUT"/{metadata,diagnostics,tools,docs}
+
+copy_failure_diagnostics() {
+	[ -z "$STEP_OUTCOMES" ] || [ ! -f "$STEP_OUTCOMES" ] || cp "$STEP_OUTCOMES" "$OUTPUT/diagnostics/step-outcomes.txt"
+	if [ -f "$OUTPUT/diagnostics/build.log" ]; then
+		tail -n 200 "$OUTPUT/diagnostics/build.log" >"$OUTPUT/diagnostics/build-log-tail.txt" || true
+	fi
+	for directory in source-validation daed-provenance daed-source-provenance; do
+		[ ! -d "$PROJECT_ROOT/$directory" ] || cp -a "$PROJECT_ROOT/$directory" "$OUTPUT/diagnostics/$directory"
+	done
+}
 
 fail_collection() {
+	rm -rf -- "$OUTPUT/firmware"
+	copy_failure_diagnostics
 	printf '%s\n' "$1" >"$OUTPUT/diagnostics/ARTIFACT_COLLECTION_ERROR.txt"
+	printf 'BUILD NOT AVAILABLE: %s\n' "$1" >"$OUTPUT/diagnostics/BUILD_NOT_AVAILABLE.txt"
 	printf '%s\n' "$1" >&2
 	exit 1
 }
+
+validate_required_outcomes() {
+	local stage values
+	[ -n "$STEP_OUTCOMES" ] || fail_collection "Required build-stage outcomes were not provided"
+	[ -f "$STEP_OUTCOMES" ] || fail_collection "Required build-stage outcomes are unavailable"
+	for stage in validate defconfig configcheck daedsource compile daedbuild inspect; do
+		values="$(sed -n "s/^${stage}=//p" "$STEP_OUTCOMES")"
+		[ "$values" = success ] || fail_collection "Required build stage did not succeed: $stage"
+	done
+}
+
+validate_required_outcomes
 
 if [ -n "$BUILD_LOG" ] && [ -f "$BUILD_LOG" ]; then
 	cp "$BUILD_LOG" "$OUTPUT/diagnostics/build.log"
@@ -86,6 +112,8 @@ fi
 [ -f "${sysupgrade[0]}" ] ||
 	fail_collection "Validated sysupgrade is unavailable: ${sysupgrade[0]}"
 
+rm -rf -- "$OUTPUT/firmware"
+mkdir -p "$OUTPUT/firmware"
 cp "${initramfs[0]}" "$OUTPUT/firmware/athena-v19-initramfs-uImage.itb"
 cp "${sysupgrade[0]}" "$OUTPUT/firmware/athena-v19-squashfs-sysupgrade.bin"
 for f in profiles.json *manifest; do

@@ -14,7 +14,7 @@ define Package/athena-runtime
 endef
 
 define Package/athena-runtime/description
- Safe setup, DAED templates, IoT Wi-Fi compatibility, health checks,
+ Safe setup, native DAED integration, IoT Wi-Fi compatibility, health checks,
  verified backup and rollback for JDCloud RE-CS-02.
 endef
 

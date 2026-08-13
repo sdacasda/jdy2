@@ -12,6 +12,10 @@ import unittest
 
 
 ROOT = Path(__file__).parents[1]
+VALID_PATCH_PIN_ARGUMENTS = [
+    "--pin", "WEB_PATCH_SHA256=" + "c" * 64,
+    "--pin", "DATABASE_PATCH_SHA256=" + "d" * 64,
+]
 
 
 class DaedSourceAssemblyTests(unittest.TestCase):
@@ -22,11 +26,27 @@ class DaedSourceAssemblyTests(unittest.TestCase):
         embedded_endpoint: bool = True,
         static_endpoint: bytes = b"/athena-daed/graphql",
         include_static_css: bool = True,
+        database_patched: bool = True,
     ):
         source_endpoint = b"/athena-daed/graphql"
         embedded_value = source_endpoint if embedded_endpoint else b"/graphql"
+        database_source = (
+            b'sqlDB.SetMaxOpenConns(1)\n'
+            b'sqlDB.SetMaxIdleConns(1)\n'
+            b'sqlDB.Exec("PRAGMA busy_timeout = 10000")\n'
+            if database_patched
+            else b"db.AutoMigrate()\n"
+        )
+        mutation_source = (
+            b"if err = tx.Error; err != nil {}\n"
+            b"err = tx.Commit().Error\n"
+            if database_patched
+            else b"tx := db.BeginTx(context.TODO())\ntx.Commit()\n"
+        )
         files = {
             "daed-2026.07.26/wing/go.mod": b"module example.invalid/wing\n",
+            "daed-2026.07.26/wing/db/db.go": database_source,
+            "daed-2026.07.26/wing/graphql/mutation.go": mutation_source,
             "daed-2026.07.26/apps/web/src/constants/default.ts": source_endpoint,
             "daed-2026.07.26/apps/web/dist/index.html": (
                 b'<link rel="icon" href="./logo.webp">'
@@ -57,6 +77,12 @@ class DaedSourceAssemblyTests(unittest.TestCase):
             archive = root / "daed-src-test.tar.gz"
             manifest = root / "assembly-manifest.json"
             self._write_cache_archive(archive)
+            web_patch_hash = sha256(
+                (ROOT / "scripts" / "patch_daed_web.py").read_bytes()
+            ).hexdigest()
+            database_patch_hash = sha256(
+                (ROOT / "scripts" / "patch_daed_database.py").read_bytes()
+            ).hexdigest()
             command = [
                 sys.executable,
                 str(ROOT / "scripts/verify_daed_source_cache.py"),
@@ -65,6 +91,8 @@ class DaedSourceAssemblyTests(unittest.TestCase):
                 "--cache-id", "cache-v1",
                 "--pin", "DAED_COMMIT=" + "a" * 40,
                 "--pin", "WING_COMMIT=" + "b" * 40,
+                "--pin", "WEB_PATCH_SHA256=" + web_patch_hash,
+                "--pin", "DATABASE_PATCH_SHA256=" + database_patch_hash,
             ]
 
             written = subprocess.run(
@@ -78,6 +106,10 @@ class DaedSourceAssemblyTests(unittest.TestCase):
 
             record = json.loads(manifest.read_text(encoding="utf-8"))
             self.assertEqual(record["schema_version"], 2)
+            self.assertEqual(record["pins"]["WEB_PATCH_SHA256"], web_patch_hash)
+            self.assertEqual(
+                record["pins"]["DATABASE_PATCH_SHA256"], database_patch_hash
+            )
             self.assertEqual(record["static_web"]["file_count"], 4)
             self.assertEqual(len(record["static_web"]["tree_sha256"]), 64)
             self.assertEqual(
@@ -106,6 +138,7 @@ class DaedSourceAssemblyTests(unittest.TestCase):
                     "--manifest", str(manifest),
                     "--cache-id", "cache-v1",
                     "--pin", "DAED_COMMIT=" + "a" * 40,
+                    *VALID_PATCH_PIN_ARGUMENTS,
                     "--write",
                 ],
                 text=True,
@@ -128,6 +161,7 @@ class DaedSourceAssemblyTests(unittest.TestCase):
                 "--manifest", str(manifest),
                 "--cache-id", "cache-v1",
                 "--pin", "DAED_COMMIT=" + "a" * 40,
+                *VALID_PATCH_PIN_ARGUMENTS,
             ]
             written = subprocess.run(
                 command + ["--write"], text=True, capture_output=True, check=False
@@ -156,6 +190,7 @@ class DaedSourceAssemblyTests(unittest.TestCase):
                 "--manifest", str(manifest),
                 "--cache-id", "cache-v1",
                 "--pin", "DAED_COMMIT=" + "a" * 40,
+                *VALID_PATCH_PIN_ARGUMENTS,
             ]
             written = subprocess.run(
                 command + ["--write"], text=True, capture_output=True, check=False
@@ -185,6 +220,7 @@ class DaedSourceAssemblyTests(unittest.TestCase):
                     "--manifest", str(manifest),
                     "--cache-id", "cache-v1",
                     "--pin", "DAED_COMMIT=" + "a" * 40,
+                    *VALID_PATCH_PIN_ARGUMENTS,
                     "--write",
                 ],
                 text=True,
@@ -211,6 +247,7 @@ class DaedSourceAssemblyTests(unittest.TestCase):
                     "--manifest", str(manifest),
                     "--cache-id", "cache-v1",
                     "--pin", "DAED_COMMIT=" + "a" * 40,
+                    *VALID_PATCH_PIN_ARGUMENTS,
                     "--write",
                 ],
                 text=True,
@@ -233,6 +270,7 @@ class DaedSourceAssemblyTests(unittest.TestCase):
                 "--manifest", str(manifest),
                 "--cache-id", "cache-v1",
                 "--pin", "DAED_COMMIT=" + "a" * 40,
+                *VALID_PATCH_PIN_ARGUMENTS,
             ]
             written = subprocess.run(
                 command + ["--write"], text=True, capture_output=True, check=False
@@ -296,7 +334,15 @@ class DaedSourceAssemblyTests(unittest.TestCase):
         self.assertIn("rev-parse HEAD", script)
         self.assertIn("immutable checkout mismatch", script)
         self.assertIn("scripts/patch_daed_web.py", script)
+        self.assertIn("scripts/patch_daed_database.py", script)
+        self.assertIn("DATABASE_PATCH_HASH", script)
+        self.assertIn('"$PATCH_HASH" "$DATABASE_PATCH_HASH"', script)
+        self.assertIn('"DATABASE_PATCH_SHA256=$DATABASE_PATCH_HASH"', script)
         self.assertLess(script.index("scripts/patch_daed_web.py"), script.index("pnpm build"))
+        self.assertLess(
+            script.index("scripts/patch_daed_database.py"),
+            script.index("tar --numeric-owner"),
+        )
         self.assertIn("compiled DAED Web does not contain the same-origin endpoint", script)
         self.assertIn("tar -tzf", script)
         self.assertIn("archive-contents.txt", script)

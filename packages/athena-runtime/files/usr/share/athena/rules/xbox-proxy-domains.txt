@@ -1,5 +1,0 @@
-# Xbox account, entitlement, and store Web traffic
-xbox.com
-xboxlive.com
-account.microsoft.com
-login.live.com

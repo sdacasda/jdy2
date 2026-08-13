@@ -96,10 +96,19 @@ class WebTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("var backendRunning = !!s.daed_running", validator)
+        self.assertIn(
+            "stopped state must return before API, page, and iframe construction",
+            validator,
+        )
+        self.assertIn(
+            "API warning must precede the running-state iframe",
+            validator,
+        )
         self.assertNotIn(
             "var ready = !!s.daed_running && !!s.daed_api_reachable",
             validator,
         )
+        self.assertNotIn("iframe must only be appended from the ready branch", validator)
 
     def test_rejects_whole_daed_site_proxy(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -131,7 +140,7 @@ class WebTests(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0, result.stdout)
 
-    def test_rejects_unconditional_daed_iframe(self):
+    def test_rejects_daed_iframe_without_stopped_early_return(self):
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
             copy_web_fixture(root)

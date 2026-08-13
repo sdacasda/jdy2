@@ -16,6 +16,17 @@ ROOT = Path(__file__).parents[1]
 FIXTURE_ROOT = ROOT / "scripts" / "tests" / "fixtures" / "daed_web"
 FIXTURE_MANIFEST = FIXTURE_ROOT / "manifest.json"
 SENTINEL_PASSWORD = "SENTINEL_DAED_PASSWORD_DO_NOT_RENDER"
+FORBIDDEN_LEAK_TOKENS = (
+    "toast.error(err.message)",
+    "toast.error((err as Error).message)",
+    "JSON.stringify(error)",
+    "JSON.stringify(err)",
+    "console.error",
+    "console.warn",
+    "request.variables",
+    "request.body",
+    "ClientError",
+)
 
 
 class DaedWebSourcePatchTests(unittest.TestCase):
@@ -139,6 +150,7 @@ class DaedWebSourcePatchTests(unittest.TestCase):
             results = self.run_safe_error_helper(setup_path.read_text(encoding="utf-8"))
 
             self.assertEqual(results[0], "Invalid username or password")
+            self.assertNotIn(SENTINEL_PASSWORD, json.dumps(results))
             self.assertEqual(results[1:], ["DAED request failed"] * (len(results) - 1))
 
     def test_second_run_is_idempotent(self):
@@ -169,6 +181,32 @@ class DaedWebSourcePatchTests(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     patch_daed_web.patch_source(root)
                 self.assertEqual((endpoint_path.read_bytes(), setup_path.read_bytes()), original)
+
+    def test_pinned_or_patched_source_leaks_are_rejected_without_writing_either_file(self):
+        for state in ("clean", "patched"):
+            for token in FORBIDDEN_LEAK_TOKENS:
+                with self.subTest(state=state, token=token), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    endpoint_path, setup_path = self.copy_fixture(root)
+                    if state == "patched":
+                        patch_daed_web.patch_source(root)
+                    setup_path.write_text(
+                        setup_path.read_text(encoding="utf-8") + f"\n// {token}\n",
+                        encoding="utf-8",
+                        newline="\n",
+                    )
+                    original = (endpoint_path.read_bytes(), setup_path.read_bytes())
+                    digest_name = (
+                        "CLEAN_SETUP_SHA256" if state == "clean" else "PATCHED_SETUP_SHA256"
+                    )
+                    with patch.object(
+                        patch_daed_web,
+                        digest_name,
+                        sha256(setup_path.read_bytes()).hexdigest(),
+                    ):
+                        with self.assertRaises(RuntimeError):
+                            patch_daed_web.patch_source(root)
+                    self.assertEqual((endpoint_path.read_bytes(), setup_path.read_bytes()), original)
 
     def test_tampered_already_patched_source_is_rejected_without_writing_either_file(self):
         mutations = {

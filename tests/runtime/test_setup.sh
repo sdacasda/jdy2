@@ -77,6 +77,7 @@ ATHENA_ROOT="$ROOT" ATHENA_LIBDIR="$LIB" "$BIN" --check >/dev/null
 
 run_setup "$ROOT"
 grep -q '^STATE=complete$' "$ROOT/var/lib/athena/setup-state" || fail 'new setup did not complete'
+grep -q '^PHASES=preflight,backed_up,runtime_applied,validated,complete$' "$ROOT/var/lib/athena/setup-state" || fail 'new setup did not record the safe state progression'
 [ ! -e "$ROOT/etc/athena/generated" ] || fail 'setup generated import files'
 assert_wing_unchanged "$ROOT" "$original_wing_hash"
 [ "$(find "$ROOT/root/athena-backups" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 1 ] || fail 'new setup did not create one backup'
@@ -86,7 +87,7 @@ assert_wing_unchanged "$ROOT" "$original_wing_hash"
 [ "$(find "$ROOT/root/athena-backups" -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 1 ] || fail 'complete setup created another backup'
 [ "$(wc -l <"$ROOT/runtime.log")" -eq 2 ] || fail 'complete setup did not reapply runtime'
 
-for legacy_state in backed_up awaiting_import validated; do
+for legacy_state in backed_up runtime_applied validated; do
 	legacy="$ROOT/$legacy_state"
 	prepare_root "$legacy"
 	legacy_wing_hash="$(wing_hash "$legacy")"
@@ -99,7 +100,7 @@ for legacy_state in backed_up awaiting_import validated; do
 	[ ! -e "$legacy/etc/athena/generated" ] || fail "$legacy_state generated import files"
 done
 
-for state in new backed_up awaiting_import validated; do
+for state in new backed_up runtime_applied validated; do
 	strict="$ROOT/strict-$state"
 	prepare_root "$strict"
 	strict_wing_hash="$(wing_hash "$strict")"
@@ -116,5 +117,12 @@ done
 strict_ecm="$ROOT/strict-ecm"
 prepare_root "$strict_ecm"
 expect_setup_failure "$strict_ecm" ecm_active
+
+for forbidden in awaiting_import generated IMPORT.md athena_render_templates; do
+
+	if grep -q "$forbidden" "$BIN"; then
+		fail "setup still contains retired template flow: $forbidden"
+	fi
+done
 
 echo "PASS: setup"

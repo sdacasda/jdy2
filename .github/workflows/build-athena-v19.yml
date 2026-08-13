@@ -52,7 +52,6 @@ jobs:
             node tests/js/test_dashboard_chart.js
             ATHENA_RUNTIME_TEST_SHELL=bash bash scripts/test_runtime_scripts.sh
             python3 scripts/verify_project.py --root .
-            python3 scripts/verify_templates.py --templates packages/athena-runtime/files/usr/share/athena/templates --rules packages/athena-runtime/files/usr/share/athena/rules
             python3 scripts/verify_package_layout.py --root .
             python3 scripts/verify_web_config.py --root .
             python3 scripts/security_check.py --root .
@@ -158,6 +157,9 @@ jobs:
             --packageinfo openwrt/tmp/.packageinfo \
             --lock SOURCES.lock.json \
             --makefile openwrt/package/custom/daed/Makefile \
+            --assembly-manifest daed-source-provenance/assembly-manifest.json \
+            --archive-provenance daed-source-provenance/archive.json \
+            --static-web-provenance daed-source-provenance/static-web.json \
             --build-log build.log \
             | tee daed-provenance/postbuild.txt
       - name: Inspect firmware
@@ -165,7 +167,9 @@ jobs:
         continue-on-error: true
         run: python3 scripts/inspect_firmware.py --openwrt openwrt --output inspection --kernel-limit 6291456
       - name: Collect artifact
+        id: collect
         if: always()
+        continue-on-error: true
         run: |
           OUTPUT="Athena-AX6600-v19-${{ github.run_number }}"
           mkdir -p "$OUTPUT/diagnostics"
@@ -178,34 +182,8 @@ jobs:
           inspect=${{ steps.inspect.outcome }}
           daedsource=${{ steps.daedsource.outcome }}
           EOF
-          if [ -d openwrt/bin/targets/qualcommax/ipq60xx ]; then
-            bash scripts/collect_output.sh \
-              openwrt "$OUTPUT" inspection/firmware-inspection.json build.log
-          else
-            mkdir -p "$OUTPUT/diagnostics"
-            printf 'Firmware build did not start or did not produce a target directory.\n' \
-              > "$OUTPUT/diagnostics/BUILD_NOT_AVAILABLE.txt"
-            cp config/athena-v19.config "$OUTPUT/diagnostics/seed.config"
-            cp openwrt/.config "$OUTPUT/diagnostics/effective.config" 2>/dev/null || true
-            openwrt/scripts/diffconfig.sh > "$OUTPUT/diagnostics/diffconfig" 2>/dev/null || true
-            grep -A30 -B5 '^Package: athena-runtime$' openwrt/tmp/.packageinfo \
-              > "$OUTPUT/diagnostics/athena-runtime-packageinfo.txt" 2>/dev/null || true
-            if [ -d package-registration ]; then
-              cp -a package-registration "$OUTPUT/diagnostics/"
-            fi
-            if [ -d openwrt/logs/package/custom ]; then
-              cp -a openwrt/logs/package/custom "$OUTPUT/diagnostics/package-scan-logs"
-            fi
-          fi
-          if [ -d daed-provenance ]; then
-            cp -a daed-provenance "$OUTPUT/diagnostics/daed-provenance"
-          fi
-          if [ -d daed-source-provenance ]; then
-            cp -a daed-source-provenance "$OUTPUT/diagnostics/daed-source-provenance"
-          fi
-          if [ -d source-validation ]; then
-            cp -a source-validation "$OUTPUT/diagnostics/source-validation"
-          fi
+          ATHENA_STEP_OUTCOMES="$OUTPUT/diagnostics/step-outcomes.txt" bash scripts/collect_output.sh \
+            openwrt "$OUTPUT" inspection/firmware-inspection.json build.log
       - uses: actions/upload-artifact@v6
         if: always()
         with:
@@ -223,15 +201,12 @@ jobs:
           echo "daedbuild=${{ steps.daedbuild.outcome }}"
           echo "inspect=${{ steps.inspect.outcome }}"
           echo "daedsource=${{ steps.daedsource.outcome }}"
-          if [ "${{ steps.validate.outcome }}" != success ]; then
-            echo "Source validation already reported the primary failure."
-            exit 0
-          fi
-          if [ "${{ steps.defconfig.outcome }}" != success ] || [ "${{ steps.configcheck.outcome }}" != success ]; then
-            echo "OpenWrt configuration already reported the primary failure. Download the diagnostic Artifact."
-            exit 0
-          fi
+          echo "collect=${{ steps.collect.outcome }}"
+          test "${{ steps.validate.outcome }}" = success
+          test "${{ steps.defconfig.outcome }}" = success
+          test "${{ steps.configcheck.outcome }}" = success
           test "${{ steps.daedsource.outcome }}" = success
           test "${{ steps.compile.outcome }}" = success
           test "${{ steps.daedbuild.outcome }}" = success
           test "${{ steps.inspect.outcome }}" = success
+          test "${{ steps.collect.outcome }}" = success

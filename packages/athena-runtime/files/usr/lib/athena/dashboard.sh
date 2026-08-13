@@ -86,11 +86,18 @@ athena_dashboard_wan() {
 	else
 		wan_ipv4=0
 	fi
-	if printf '%s%s' "$wan_compact" "$wan6_compact" |
-		grep -Eq '"ipv6-address"[[:space:]]*:[[:space:]]*\[[[:space:]]*\{'; then
+	global_ipv6="$(ip -6 addr show scope global 2>/dev/null || true)"
+	default_ipv6_route="$(ip -6 route show default 2>/dev/null || true)"
+	if printf '%s' "$global_ipv6" |
+		grep -Eq 'inet6[[:space:]]+[23][0-9A-Fa-f]*:'; then
 		wan_ipv6=1
 	elif printf '%s%s' "$wan_compact" "$wan6_compact" |
-		grep -Eq '"ipv6-prefix"[[:space:]]*:[[:space:]]*\[[[:space:]]*\{'; then
+		grep -Eqi '"address"[[:space:]]*:[[:space:]]*"[23][0-9a-f]*:'; then
+		wan_ipv6=1
+	elif printf '%s' "$default_ipv6_route" | grep -Eq '^default[[:space:]]'; then
+		wan_ipv6=1
+	elif printf '%s' "$wan6_compact" |
+		grep -Eq '"target"[[:space:]]*:[[:space:]]*"::"[[:space:]]*,[[:space:]]*"mask"[[:space:]]*:[[:space:]]*0'; then
 		wan_ipv6=1
 	else
 		wan_ipv6=0

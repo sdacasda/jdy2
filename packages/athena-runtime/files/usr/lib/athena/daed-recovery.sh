@@ -29,6 +29,25 @@ athena_daed_recovery_wait_stopped() {
 	return 1
 }
 
+athena_daed_recovery_wait_ready() {
+	athena_daed_recovery_wait=0
+	while [ "$athena_daed_recovery_wait" -lt 5 ]; do
+		pidof daed >/dev/null 2>&1 && athena_daed_graphql_reachable && return 0
+		sleep 1
+		athena_daed_recovery_wait=$((athena_daed_recovery_wait + 1))
+	done
+	return 1
+}
+
+athena_daed_recovery_validate_database() {
+	athena_daed_recovery_validation="$(sqlite3 "$(athena_root /etc/daed/wing.db)" \
+		'PRAGMA quick_check; SELECT count(*) FROM users;' 2>/dev/null)" || return 1
+	[ "$(printf '%s\n' "$athena_daed_recovery_validation" | sed -n '1p')" = ok ] || return 1
+	athena_daed_recovery_user_count="$(printf '%s\n' "$athena_daed_recovery_validation" | sed -n '2p')"
+	case "$athena_daed_recovery_user_count" in ''|0|*[!0-9]*) return 1 ;; esac
+	[ "$(printf '%s\n' "$athena_daed_recovery_validation" | wc -l | tr -d ' ')" = 2 ]
+}
+
 athena_daed_recovery_backup() {
 	athena_daed_recovery_db="$(athena_root /etc/daed/wing.db)"
 	athena_daed_recovery_root="$(athena_root /root/athena-backups)"
@@ -68,6 +87,33 @@ athena_daed_recovery_backup() {
 	)
 }
 
+athena_daed_recovery_restore_backup() {
+	[ -n "$athena_daed_recovery_backup_path" ] || return 1
+	(
+		cd "$athena_daed_recovery_backup_path" || exit 1
+		sha256sum -c checksums.sha256 >/dev/null
+	) || return 1
+	athena_daed_recovery_restore_root="$(athena_root /etc/daed)"
+	for athena_daed_recovery_file in wing.db wing.db-wal wing.db-shm wing.db-journal; do
+		athena_daed_recovery_source="$athena_daed_recovery_backup_path/$athena_daed_recovery_file"
+		athena_daed_recovery_target="$athena_daed_recovery_restore_root/$athena_daed_recovery_file"
+		athena_daed_recovery_tmp="$athena_daed_recovery_restore_root/.athena-daed-restore-$$-$athena_daed_recovery_file"
+		if [ -f "$athena_daed_recovery_source" ]; then
+			cp "$athena_daed_recovery_source" "$athena_daed_recovery_tmp" || return 1
+			chmod 600 "$athena_daed_recovery_tmp" || { rm -f "$athena_daed_recovery_tmp"; return 1; }
+			athena_daed_recovery_source_hash="$(sha256sum "$athena_daed_recovery_source" | awk '{print $1}')" || return 1
+			athena_daed_recovery_tmp_hash="$(sha256sum "$athena_daed_recovery_tmp" | awk '{print $1}')" || return 1
+			[ "$athena_daed_recovery_source_hash" = "$athena_daed_recovery_tmp_hash" ] || { rm -f "$athena_daed_recovery_tmp"; return 1; }
+			mv -f "$athena_daed_recovery_tmp" "$athena_daed_recovery_target" || return 1
+		elif [ "$athena_daed_recovery_file" != wing.db ]; then
+			rm -f "$athena_daed_recovery_target" || return 1
+		else
+			return 1
+		fi
+	done
+	athena_daed_recovery_validate_database
+}
+
 athena_daed_recovery_parse_output() {
 	athena_daed_recovery_remaining=$1
 	athena_daed_recovery_count=0
@@ -104,11 +150,20 @@ athena_daed_reset_password() {
 	umask 077
 	athena_daed_recovery_locked=0 athena_daed_recovery_was_running=0 athena_daed_recovery_emitted=0
 	athena_daed_recovery_stopped=0 athena_daed_recovery_restored=0 athena_daed_recovery_backup_path=""
+	athena_daed_recovery_database_dirty=0 athena_daed_recovery_succeeded=0
 	athena_daed_recovery_cleanup() {
 		athena_daed_recovery_status=$?
 		trap - 0 HUP INT TERM
+		if [ "$athena_daed_recovery_succeeded" != 1 ] && [ "$athena_daed_recovery_database_dirty" = 1 ]; then
+			"${ATHENA_DAED_INIT:-/etc/init.d/daed}" stop >/dev/null 2>&1 || true
+			if athena_daed_recovery_wait_stopped && athena_daed_recovery_restore_backup; then
+				athena_daed_recovery_database_dirty=0
+			fi
+		fi
 		if [ "$athena_daed_recovery_was_running" = 1 ] && [ "$athena_daed_recovery_stopped" = 1 ] && [ "$athena_daed_recovery_restored" != 1 ]; then
-			"${ATHENA_DAED_INIT:-/etc/init.d/daed}" start >/dev/null 2>&1 || true
+			if "${ATHENA_DAED_INIT:-/etc/init.d/daed}" start >/dev/null 2>&1 && athena_daed_recovery_wait_ready; then
+				athena_daed_recovery_restored=1
+			fi
 		fi
 		[ "$athena_daed_recovery_locked" = 1 ] && athena_unlock
 		unset athena_daed_recovery_output athena_daed_recovery_remaining athena_daed_recovery_line athena_daed_recovery_value
@@ -131,7 +186,6 @@ athena_daed_reset_password() {
 	trap 'athena_daed_recovery_signal 143' TERM
 	athena_lock daed-recovery || { athena_daed_recovery_fail_once 'recovery is already running'; exit 1; }
 	athena_daed_recovery_locked=1
-	if ! athena_daed_recovery_backup; then athena_daed_recovery_fail_once 'DAED backup verification failed' "$athena_daed_recovery_backup_path"; exit 1; fi
 	if "${ATHENA_DAED_INIT:-/etc/init.d/daed}" enabled >/dev/null 2>&1; then
 		athena_daed_recovery_was_enabled=1
 	else
@@ -141,8 +195,12 @@ athena_daed_reset_password() {
 		athena_daed_recovery_was_running=1
 		athena_daed_recovery_stopped=1
 		"${ATHENA_DAED_INIT:-/etc/init.d/daed}" stop >/dev/null 2>&1 || true
-		if ! athena_daed_recovery_wait_stopped; then athena_daed_recovery_fail_once 'DAED did not stop' "$athena_daed_recovery_backup_path"; exit 1; fi
 	fi
+	# A backup is useful only after both the process and GraphQL endpoint are
+	# cold.  Never copy a live SQLite database or any of its journal sidecars.
+	if ! athena_daed_recovery_wait_stopped; then athena_daed_recovery_fail_once 'DAED did not stop'; exit 1; fi
+	if ! athena_daed_recovery_backup; then athena_daed_recovery_fail_once 'DAED backup verification failed' "$athena_daed_recovery_backup_path"; exit 1; fi
+	athena_daed_recovery_database_dirty=1
 	athena_daed_recovery_capture="$({ "${ATHENA_DAED_BIN:-/usr/bin/daed}" resetpass --config "$(athena_root /etc/daed)"; athena_daed_recovery_rc=$?; printf '\n__ATHENA_DAED_RESETPASS_RC_%s__' "$athena_daed_recovery_rc"; } 2>/dev/null)"
 	case "$athena_daed_recovery_capture" in
 	*'__ATHENA_DAED_RESETPASS_RC_0__') athena_daed_recovery_output=${athena_daed_recovery_capture%__ATHENA_DAED_RESETPASS_RC_0__} ;;
@@ -156,10 +214,14 @@ athena_daed_reset_password() {
 	case "$athena_daed_recovery_output" in *'
 '*) athena_daed_recovery_fail_once 'DAED reset output was invalid' "$athena_daed_recovery_backup_path"; exit 1;; esac
 	if ! athena_daed_recovery_parse_output "$athena_daed_recovery_output"; then athena_daed_recovery_fail_once 'DAED reset output was invalid' "$athena_daed_recovery_backup_path"; exit 1; fi
+	if ! athena_daed_recovery_validate_database; then athena_daed_recovery_fail_once 'DAED database validation failed' "$athena_daed_recovery_backup_path"; exit 1; fi
 	if [ "$athena_daed_recovery_was_running" = 1 ]; then
 		"${ATHENA_DAED_INIT:-/etc/init.d/daed}" start >/dev/null 2>&1 || { athena_daed_recovery_fail_once 'DAED restart failed' "$athena_daed_recovery_backup_path"; exit 1; }
+		if ! athena_daed_recovery_wait_ready; then athena_daed_recovery_fail_once 'DAED did not become ready' "$athena_daed_recovery_backup_path"; exit 1; fi
 	fi
 	athena_daed_recovery_restored=1
+	athena_daed_recovery_database_dirty=0
+	athena_daed_recovery_succeeded=1
 	printf '{"ok":true,"username":"%s","password":"%s","backup":"%s"}\n' "$(athena_json_escape "$athena_daed_recovery_username")" "$(athena_json_escape "$athena_daed_recovery_password")" "$(athena_json_escape "$athena_daed_recovery_backup_path")"
 	athena_daed_recovery_status=$?
 	unset athena_daed_recovery_output athena_daed_recovery_username athena_daed_recovery_password

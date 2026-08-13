@@ -45,6 +45,15 @@ TOAST_ERROR_PATTERN = re.compile(r"\btoast\.error\s*\(")
 CATCH_PATTERN = re.compile(r"\bcatch\s*\(")
 DIRECT_ERROR_TOAST_PATTERN = re.compile(r"toast\.error\s*\(\s*err\.message\s*\)")
 JSON_STRINGIFY_PATTERN = re.compile(r"JSON\.stringify\s*\(")
+FORBIDDEN_SOURCE_LEAKS = (
+    "toast.error(err.message)",
+    "JSON.stringify(error)",
+    "JSON.stringify(err)",
+    "console.",
+    "request.variables",
+    "request.body",
+    "ClientError",
+)
 
 
 def sha256_bytes(contents: bytes) -> str:
@@ -107,6 +116,9 @@ def patch_source(root: Path) -> None:
     original_setup = setup_path.read_bytes()
     endpoint = original_endpoint.decode("utf-8").replace("\r\n", "\n")
     setup = original_setup.decode("utf-8").replace("\r\n", "\n")
+    for leak in FORBIDDEN_SOURCE_LEAKS:
+        if leak in setup:
+            raise RuntimeError(f"unsafe DAED Web login error content: {leak}")
     endpoint_state = (endpoint.count(OLD), endpoint.count(NEW))
     setup_state = (
         setup.count(RAW_ERROR_TOAST),

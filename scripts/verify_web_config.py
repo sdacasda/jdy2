@@ -77,13 +77,29 @@ def main():
         "var backendRunning = !!s.daed_running" in panel,
         "DAED process gate is missing",
     )
+    backend_index = panel.index("var backendRunning = !!s.daed_running")
+    stopped_index = panel.index("if (!backendRunning)")
+    api_index = panel.index("var apiReachable = !!s.daed_api_reachable")
+    page_index = panel.index("var page = E('div'")
+    iframe_index = panel.index("page.appendChild(E('iframe'")
+    stopped_branch = panel[stopped_index:api_index]
     require(
-        "if (!backendRunning)" in panel and "_('后端未连接')" in panel,
-        "DAED disconnected state must show only the concise backend message",
+        backend_index < stopped_index < api_index < page_index < iframe_index,
+        "DAED stopped state must return before API, page, and iframe construction",
     )
     require(
-        "\n\t\t\tpage.appendChild(E('iframe'" in panel,
-        "DAED iframe must only be appended from the ready branch",
+        "return E('div'" in stopped_branch
+        and stopped_branch.count("\u540e\u7aef\u672a\u8fde\u63a5") == 1
+        and not any(token in stopped_branch for token in (
+            "statusChip(", "athena-daed-summary", "athena-daed-actions",
+            "handleStart", "handleRefresh", "E('iframe'",
+        )),
+        "DAED stopped state must contain only the disconnected message",
+    )
+    require(
+        "if (backendRunning && !apiReachable)" in panel
+        and panel.index("if (backendRunning && !apiReachable)") < iframe_index,
+        "DAED API warning must precede the running-state iframe",
     )
     require("DAED 后端尚未就绪" not in panel, "legacy DAED error card remains")
     require("athena-health --verbose" not in panel, "disconnected state must not expose diagnostics")

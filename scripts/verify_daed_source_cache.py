@@ -7,15 +7,29 @@ import argparse
 import gzip
 import hashlib
 import json
+import re
 import sys
 import tarfile
 from pathlib import Path, PurePosixPath
 
-from install_daed_web import inspect_archive
+from install_daed_web import FORBIDDEN_WEB_LEAK_TOKENS, inspect_archive
 
 
 ENDPOINT = b"/athena-daed/graphql"
 MAX_WEB_ASSET_SIZE = 32 * 1024 * 1024
+DATABASE_PATCH_MEMBERS = {
+    "wing/db/db.go": (
+        b"sqlDB.SetMaxOpenConns(1)",
+        b"sqlDB.SetMaxIdleConns(1)",
+        b'sqlDB.Exec("PRAGMA busy_timeout = 10000")',
+    ),
+    "wing/graphql/mutation.go": (
+        b"if err = tx.Error; err != nil",
+        b"err = tx.Commit().Error",
+    ),
+}
+PATCH_HASH_PINS = ("WEB_PATCH_SHA256", "DATABASE_PATCH_SHA256")
+SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 def sha256_file(path: Path) -> str:
@@ -35,6 +49,12 @@ def parse_pins(values: list[str]) -> dict[str, str]:
         pins[key] = pin
     if not pins:
         raise RuntimeError("at least one immutable pin is required")
+    for key in PATCH_HASH_PINS:
+        value = pins.get(key)
+        if value is None:
+            raise RuntimeError(f"missing immutable patch hash pin: {key}")
+        if not SHA256_RE.fullmatch(value):
+            raise RuntimeError(f"invalid immutable patch hash pin: {key}")
     return dict(sorted(pins.items()))
 
 
@@ -84,12 +104,36 @@ def verify_archive_contents(archive: Path) -> str:
             if source is None or ENDPOINT not in read_member(bundle, source):
                 raise RuntimeError("cache archive is missing the source endpoint patch")
 
+            for relative_path, required_strings in DATABASE_PATCH_MEMBERS.items():
+                member_name = f"{root}/{relative_path}"
+                member = next(
+                    (candidate for candidate in members if candidate.name == member_name),
+                    None,
+                )
+                if member is None:
+                    raise RuntimeError(
+                        f"cache archive is missing database patch source: {relative_path}"
+                    )
+                source = read_member(bundle, member)
+                for required in required_strings:
+                    if required not in source:
+                        raise RuntimeError(
+                            f"cache archive is missing database patch in {relative_path}: "
+                            f"{required.decode('ascii')}"
+                        )
+
             embedded = False
             web_prefix = f"{root}/wing/webrender/web/"
             for member in members:
-                if member.name.startswith(web_prefix) and ENDPOINT in read_member(bundle, member):
+                if not member.name.startswith(web_prefix):
+                    continue
+                embedded_asset = read_member(bundle, member)
+                if any(token in embedded_asset for token in FORBIDDEN_WEB_LEAK_TOKENS):
+                    raise RuntimeError(
+                        "embedded Web bundle contains unsafe login error content"
+                    )
+                if ENDPOINT in embedded_asset:
                     embedded = True
-                    break
             if not embedded:
                 raise RuntimeError("embedded Web bundle does not contain the same-origin endpoint")
             return root

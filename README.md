@@ -36,7 +36,7 @@ DAED 面板： LuCI → 服务 → Athena 优化 → DAED 面板
 端口 2023：仅路由器回环地址可访问
 ```
 
-DAED 默认关闭；请从 LuCI 的“服务 → Athena 优化 → DAED 面板”临时启动 DAED，再在原生 UI 中导入或添加节点并完成配置，验证可用后如需开机启动，请通过 SSH 执行 `/etc/init.d/daed enable`；如需取消开机启动，执行 `/etc/init.d/daed disable`。不需要导入模板。
+DAED 默认关闭；请从 LuCI 的“服务 → Athena 优化 → DAED 面板”临时启动 DAED，再在原生 UI 中添加订阅、节点并完成 DNS 与路由配置，验证可用后如需开机启动，请通过 SSH 执行 `/etc/init.d/daed enable`；如需取消开机启动，执行 `/etc/init.d/daed disable`。
 
 ## 构建与测试
 

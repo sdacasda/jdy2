@@ -71,7 +71,7 @@ class DocsTests(unittest.TestCase):
             "再在原生 UI 中导入或添加节点并完成配置，验证可用后如需开机启动，请通过 SSH 执行 "
             "`/etc/init.d/daed enable`；如需取消开机启动，执行 `/etc/init.d/daed disable`。不需要导入模板。"
         )
-        self.assertIn(expected_sequence, readme)
+        self.assertIn("/athena-daed/", readme)
 
     def test_production_version_metadata_has_no_rc1(self):
         for relative in PRODUCTION_VERSION_FILES:
@@ -91,6 +91,26 @@ class DocsTests(unittest.TestCase):
         self.assertIn("athena-iot setup", text)
         self.assertIn("DAED 默认关闭", text)
         self.assertNotIn("http://192.168.50.1:2023", text)
+
+    def test_native_daed_ui_has_no_template_import_workflow(self):
+        files = [ROOT / "README.md", *(ROOT / "docs").glob("*.md")]
+        text = "\n".join(path.read_text(encoding="utf-8") for path in files)
+
+        for required in (
+            "服务 → Athena 优化 → DAED 面板",
+            "/athena-daed/",
+            "athena-daed-reset-password",
+            "wing.db",
+        ):
+            self.assertIn(required, text)
+
+        for forbidden in (
+            "配置模板",
+            "generated/*.dae",
+            "导入模板",
+            "http://192.168.50.1:2023",
+        ):
+            self.assertNotIn(forbidden, text)
 
     def test_no_common_mojibake_in_user_docs(self):
         files = [ROOT / "README.md", *(ROOT / "docs").glob("*.md")]

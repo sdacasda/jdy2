@@ -15,9 +15,27 @@ COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 BASE_REQUIRED = (
     "PROJECT.json",
     "SOURCES.lock.json",
-    "docs/superpowers/specs/2026-07-25-athena-v19-design.md",
-    "docs/superpowers/plans/2026-07-25-athena-v19-implementation.md",
 )
+RETIRED_TEMPLATE_TOKENS = (
+    "/usr/share/athena/templates",
+    "/usr/share/athena/rules",
+    "verify_templates.py",
+    "templates.sh",
+    "generated/global.dae",
+    "generated/dns.dae",
+    "generated/routing.dae",
+    "awaiting_import",
+    "athena_render_templates",
+)
+
+
+def is_production_or_ci_file(path: pathlib.Path) -> bool:
+    return path.suffix != ".md" and path not in {
+        pathlib.Path("scripts/verify_project.py"),
+        pathlib.Path("scripts/verify_package_layout.py"),
+    } and "tests" not in path.parts and ".superpowers" not in path.parts and not (
+        len(path.parts) >= 2 and path.parts[0] == "docs" and path.parts[1] == "superpowers"
+    )
 
 
 def main() -> int:
@@ -92,18 +110,21 @@ def main() -> int:
                 errors.append(f"legacy v18 path remains: {relative}")
 
     for path in root.rglob("*"):
-        if not path.is_file() or ".git" in path.parts or path.suffix in {".zip", ".bin", ".itb", ".pyc"}:
+        relative = path.relative_to(root)
+        if not path.is_file() or {".git", ".superpowers"}.intersection(relative.parts) or path.suffix in {".zip", ".bin", ".itb", ".pyc"}:
             continue
         try:
             text = path.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
             continue
-        relative = path.relative_to(root)
+        if is_production_or_ci_file(relative):
+            for token in RETIRED_TEMPLATE_TOKENS:
+                if token in text:
+                    errors.append(f"retired template reference: {relative.as_posix()}: {token}")
         placeholder_implementation = (
             "tests" in path.parts
-            or path.name in {"verify_templates.py", "templates.sh"}
         )
-        if path.suffix != ".tpl" and "docs" not in path.parts and not placeholder_implementation and re.search(r"\{\{[A-Z0-9_]+\}\}", text):
+        if "docs" not in path.parts and not placeholder_implementation and re.search(r"\{\{[A-Z0-9_]+\}\}", text):
             errors.append(f"unresolved template variable outside .tpl: {relative}")
         if "\r\n" in text:
             errors.append(f"CRLF line endings: {relative}")

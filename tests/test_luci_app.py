@@ -20,39 +20,37 @@ class LuciAppTests(unittest.TestCase):
         self.assertNotIn("dashboard", write_methods)
         self.assertNotIn("templates", read_methods)
         self.assertNotIn("templates", write_methods)
-        for method in ("daed_start", "daed_stop", "daed_reset_password"):
+        for method in ("daed_start", "daed_stop"):
             self.assertIn(method, write_methods)
             self.assertNotIn(method, read_methods)
+        self.assertNotIn("daed_reset_password", write_methods)
 
-    def test_template_workflow_is_not_exposed_but_reference_data_remains_packaged(self):
-        view = (
-            ROOT
-            / "packages/luci-app-athena/htdocs/luci-static/resources/view/athena/templates.js"
+    def test_template_subsystem_is_completely_absent(self):
+        retired_paths = (
+            "packages/luci-app-athena/htdocs/luci-static/resources/view/athena/templates.js",
+            "packages/athena-runtime/files/usr/lib/athena/templates.sh",
+            "packages/athena-runtime/files/usr/share/athena/templates/global.dae.tpl",
+            "packages/athena-runtime/files/usr/share/athena/templates/dns.dae.tpl",
+            "packages/athena-runtime/files/usr/share/athena/templates/routing.dae.tpl",
+            "packages/athena-runtime/files/usr/share/athena/rules/steam-direct-domains.txt",
+            "packages/athena-runtime/files/usr/share/athena/rules/steam-proxy-domains.txt",
+            "packages/athena-runtime/files/usr/share/athena/rules/xbox-direct-domains.txt",
+            "packages/athena-runtime/files/usr/share/athena/rules/xbox-proxy-domains.txt",
+            "scripts/verify_templates.py",
+            "tests/test_templates.py",
         )
-        self.assertFalse(view.exists())
+        for relative in retired_paths:
+            self.assertFalse((ROOT / relative).exists(), relative)
 
         rpcd = (
             ROOT / "packages/athena-runtime/files/usr/libexec/rpcd/athena"
         ).read_text(encoding="utf-8", errors="strict")
-        self.assertNotIn('"templates":{}', rpcd)
-        self.assertNotIn("\n\t\t\ttemplates)", rpcd)
+        self.assertNotIn("templates", rpcd)
+        self.assertNotIn("athena_render_templates", rpcd)
 
-        templates = ROOT / "packages/athena-runtime/files/usr/share/athena/templates"
-        rules = ROOT / "packages/athena-runtime/files/usr/share/athena/rules"
-        for path in (
-            templates / "global.dae.tpl",
-            templates / "dns.dae.tpl",
-            templates / "routing.dae.tpl",
-            rules / "steam-proxy-domains.txt",
-            rules / "steam-direct-domains.txt",
-        ):
-            self.assertTrue(path.is_file(), path)
-        self.assertTrue(
-            (
-                ROOT
-                / "packages/athena-runtime/files/usr/lib/athena/templates.sh"
-            ).is_file()
-        )
+        acl = (ROOT / "packages/athena-runtime/files/usr/share/rpcd/acl.d/luci-app-athena.json").read_text(encoding="utf-8", errors="strict")
+        self.assertNotIn("templates", acl)
+        self.assertNotIn("athena_render_templates", acl)
 
     def test_dashboard_overrides_only_the_overview_and_athena_status(self):
         override = json.loads(
@@ -110,7 +108,7 @@ class LuciAppTests(unittest.TestCase):
         self.assertNotIn("http://", panel)
         self.assertNotIn("https://", panel)
 
-    def test_daed_panel_only_hides_the_complete_original_ui_when_process_is_stopped(self):
+    def test_daed_panel_stopped_branch_returns_only_the_disconnected_message(self):
         panel = (
             ROOT
             / "packages/luci-app-athena/htdocs/luci-static/resources/view/athena/daed-panel.js"
@@ -121,29 +119,54 @@ class LuciAppTests(unittest.TestCase):
         self.assertIn("allow-scripts", panel)
         self.assertIn("var backendRunning = !!s.daed_running", panel)
         self.assertIn("if (!backendRunning)", panel)
-        self.assertIn("_('后端未连接')", panel)
         self.assertNotIn("DAED 后端尚未就绪", panel)
         self.assertNotIn("athena-health --verbose", panel)
         self.assertNotIn("recovery_url", panel)
-        frame_index = panel.index("E('iframe'")
-        running_index = panel.index("if (!backendRunning)")
-        self.assertLess(running_index, frame_index)
-        self.assertIn("daed_running", panel[:frame_index])
+        stopped_index = panel.index("if (!backendRunning)")
+        running_index = panel.index("var apiReachable")
+        stopped_branch = panel[stopped_index:running_index]
+        self.assertIn("return E('div'", stopped_branch)
+        disconnected_message = "\u540e\u7aef\u672a\u8fde\u63a5"
+        self.assertEqual(stopped_branch.count(disconnected_message), 1)
+        for forbidden in (
+            "statusChip(",
+            "athena-daed-summary",
+            "athena-daed-actions",
+            "handleStart",
+            "handleRefresh",
+            "E('iframe'",
+        ):
+            self.assertNotIn(forbidden, stopped_branch)
+        for running_content in (
+            "E('h2'",
+            "athena-daed-summary",
+            "athena-daed-actions",
+            "E('iframe'",
+        ):
+            self.assertLess(stopped_index, panel.index(running_content, stopped_index))
 
-    def test_daed_password_recovery_rpc_is_gated_and_uses_shared_library(self):
+    def test_daed_panel_keeps_the_same_origin_ui_when_api_is_unreachable(self):
+        panel = (
+            ROOT
+            / "packages/luci-app-athena/htdocs/luci-static/resources/view/athena/daed-panel.js"
+        ).read_text(encoding="utf-8", errors="strict")
+        self.assertIn("var apiReachable = !!s.daed_api_reachable", panel)
+        self.assertIn("if (backendRunning && !apiReachable)", panel)
+        self.assertIn("athena-daed-api-warning", panel)
+        self.assertIn("handleRecoveryCommand", panel)
+        self.assertLess(
+            panel.index("if (backendRunning && !apiReachable)"),
+            panel.index("E('iframe'"),
+        )
+
+    def test_daed_password_recovery_is_not_exposed_over_rpc(self):
         rpcd = (
             ROOT / "packages/athena-runtime/files/usr/libexec/rpcd/athena"
         ).read_text(encoding="utf-8", errors="strict")
-        self.assertIn('"daed_reset_password":{"confirmation":"String"}', rpcd)
-        self.assertIn('. "$ATHENA_LIBDIR/daed-recovery.sh"', rpcd)
-        self.assertIn('daed_reset_password)', rpcd)
-        self.assertIn('json_get_type confirmation_type confirmation', rpcd)
-        self.assertIn('json_get_var confirmation confirmation', rpcd)
-        self.assertIn('[ "$confirmation_type" = string ]', rpcd)
-        self.assertIn("[ \"$confirmation\" = 'RESET DAED PASSWORD' ]", rpcd)
-        self.assertIn('athena_daed_reset_password "$confirmation"', rpcd)
+        self.assertNotIn("daed_reset_password", rpcd)
+        self.assertNotIn("daed-recovery.sh", rpcd)
 
-    def test_daed_password_recovery_requires_luci_write_acl(self):
+    def test_daed_password_recovery_is_not_in_luci_acl(self):
         acl_paths = list(
             (ROOT / "packages").rglob(
                 "usr/share/rpcd/acl.d/luci-app-athena.json"
@@ -165,27 +188,19 @@ class LuciAppTests(unittest.TestCase):
         )
         read_methods = acl["luci-app-athena"]["read"]["ubus"]["athena"]
         write_methods = acl["luci-app-athena"]["write"]["ubus"]["athena"]
-        self.assertIn("daed_reset_password", write_methods)
+        self.assertNotIn("daed_reset_password", write_methods)
         self.assertNotIn("daed_reset_password", read_methods)
 
-    def test_daed_password_recovery_modal_requires_confirmation_and_clears_credentials(self):
+    def test_daed_password_recovery_panel_only_offers_the_interactive_cli(self):
         panel = (
             ROOT
             / "packages/luci-app-athena/htdocs/luci-static/resources/view/athena/daed-panel.js"
         ).read_text(encoding="utf-8", errors="strict")
-        self.assertIn("method: 'daed_reset_password'", panel)
-        self.assertIn("params: [ 'confirmation' ]", panel)
-        self.assertIn("RESET DAED PASSWORD", panel)
-        self.assertIn("This action resets the DAED password", panel)
-        self.assertIn("input.value !== DAED_RESET_CONFIRMATION", panel)
-        self.assertIn("callDaedResetPassword(input.value)", panel)
-        self.assertNotIn("callDaedResetPassword({", panel)
-        self.assertIn("clearDaedRecoveryCredentials", panel)
-        self.assertIn("credentialNode.textContent = ''", panel)
-        self.assertIn("credentials.username = ''", panel)
-        self.assertIn("credentials.password = ''", panel)
-        self.assertIn("result.username = ''", panel)
-        self.assertIn("result.password = ''", panel)
+        self.assertIn("athena-daed-reset-password", panel)
+        self.assertNotIn("daed_reset_password", panel)
+        self.assertNotIn("Generated password", panel)
+        self.assertNotIn("credentials.password", panel)
+        self.assertNotIn("result.password", panel)
 
     def test_daed_password_recovery_panel_does_not_log_or_store_credentials(self):
         panel = (
@@ -196,6 +211,7 @@ class LuciAppTests(unittest.TestCase):
         self.assertNotIn("localStorage", panel)
         self.assertNotIn("sessionStorage", panel)
         self.assertNotIn("uci.", panel)
+        self.assertNotIn("daed_reset_password", panel)
 
 if __name__ == "__main__":
     unittest.main()

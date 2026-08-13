@@ -8,6 +8,15 @@ import tempfile
 import unittest
 
 ROOT=Path(__file__).parents[1]
+REQUIRED_OUTCOMES=(
+ "validate",
+ "defconfig",
+ "configcheck",
+ "daedsource",
+ "compile",
+ "daedbuild",
+ "inspect",
+)
 
 
 def shell_path(path):
@@ -22,8 +31,13 @@ def shell_path(path):
  return subprocess.check_output([cygpath,"-u",str(path)],text=True).strip()
 
 
-def run_collect(topdir,output,inspection,build_log):
+def run_collect(topdir,output,inspection,build_log,outcomes):
  script=shell_path(ROOT/"scripts/collect_output.sh")
+ outcomes_path=Path(output).parent/"step-outcomes.txt"
+ outcomes_path.write_text(
+  "".join(f"{stage}={outcomes[stage]}\n" for stage in REQUIRED_OUTCOMES),
+  encoding="utf-8",
+ )
  arguments=" ".join(
   f"'{shell_path(path)}'" for path in (topdir,output,inspection,build_log)
  )
@@ -46,6 +60,7 @@ def run_collect(topdir,output,inspection,build_log):
   ]
  environment=os.environ.copy()
  environment["ATHENA_PYTHON"]=sys.executable
+ environment["ATHENA_STEP_OUTCOMES"]=shell_path(outcomes_path)
  return subprocess.run(
   command,
   cwd=ROOT,
@@ -60,7 +75,7 @@ def run_collect(topdir,output,inspection,build_log):
 class ArtifactTests(unittest.TestCase):
  def test_layout_and_strict_images(self):
   t=(ROOT/"scripts/collect_output.sh").read_text(encoding="utf-8")
-  for x in ("firmware,metadata,diagnostics,tools,docs","athena-v19-initramfs-uImage.itb","athena-v19-squashfs-sysupgrade.bin","SHA256SUMS.txt","verify_after_flash.sh","WEB_RECOVERY.md","firmware-inspection.json","kernel-size.txt"):
+  for x in ('mkdir -p "$OUTPUT"/{metadata,diagnostics,tools,docs}','mkdir -p "$OUTPUT/firmware"',"athena-v19-initramfs-uImage.itb","athena-v19-squashfs-sysupgrade.bin","SHA256SUMS.txt","verify_after_flash.sh","WEB_RECOVERY.md","firmware-inspection.json","kernel-size.txt"):
    self.assertIn(x,t)
   self.assertIn('\"${#initramfs[@]}\" -eq 1',t)
 
@@ -110,7 +125,9 @@ class ArtifactTests(unittest.TestCase):
    build_log=root/"build.log"
    build_log.write_text("build succeeded\n",encoding="utf-8")
 
-   result=run_collect(topdir,output,inspection,build_log)
+   outcomes={stage:"success" for stage in REQUIRED_OUTCOMES}
+   self.assertEqual(len(outcomes),7)
+   result=run_collect(topdir,output,inspection,build_log,outcomes)
 
    self.assertEqual(result.returncode,0,result.stderr)
    self.assertEqual(
@@ -134,7 +151,7 @@ class ArtifactTests(unittest.TestCase):
     "Artifact contains filenames that collide on Windows",
    )
 
- def test_failed_collection_still_preserves_inspection_evidence(self):
+ def test_failed_outcome_produces_diagnostics_without_firmware(self):
   with tempfile.TemporaryDirectory(dir=ROOT) as directory:
    root=Path(directory)
    topdir=root/"openwrt"
@@ -152,29 +169,27 @@ class ArtifactTests(unittest.TestCase):
     encoding="utf-8",
    )
 
-   result=run_collect(topdir,output,inspection,build_log)
+   outcomes={stage:"success" for stage in REQUIRED_OUTCOMES}
+   outcomes["daedbuild"]="failure"
+   result=run_collect(topdir,output,inspection,build_log,outcomes)
 
    self.assertNotEqual(result.returncode,0)
-   self.assertTrue(
-    (output/"diagnostics/firmware-inspection.json").is_file()
-   )
    self.assertTrue(
     (output/"diagnostics/ARTIFACT_COLLECTION_ERROR.txt").is_file()
    )
    self.assertTrue(
-    (output/"diagnostics/build.log").is_file()
+    (output/"diagnostics/BUILD_NOT_AVAILABLE.txt").is_file()
+   )
+   self.assertFalse((output/"firmware").exists())
+   self.assertEqual(
+    (output/"diagnostics/step-outcomes.txt").read_text(encoding="utf-8"),
+    "".join(f"{stage}={outcomes[stage]}\n" for stage in REQUIRED_OUTCOMES),
+   )
+   error=(output/"diagnostics/ARTIFACT_COLLECTION_ERROR.txt").read_text(
+    encoding="utf-8",
    )
    self.assertEqual(
-    (output/"diagnostics/build.log").read_text(encoding="utf-8"),
-    "bash: line 1: pahole: command not found\n"
-    "ERROR: package/custom/vmlinux-btf failed to build.\n",
-   )
-   summary=(output/"diagnostics/build-error-summary.txt").read_text(
-    encoding="utf-8"
-   )
-   self.assertIn("pahole: command not found",summary)
-   self.assertIn("vmlinux-btf failed to build",summary)
-   self.assertTrue(
-    (output/"diagnostics/target-files.txt").is_file()
+    error,
+    "Required build stage did not succeed: daedbuild\n",
    )
 if __name__=="__main__": unittest.main()

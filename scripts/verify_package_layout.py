@@ -29,6 +29,27 @@ DASHBOARD_FORBIDDEN = (
     "rollback",
 )
 
+RETIRED_TEMPLATE_PATHS = (
+    "packages/luci-app-athena/htdocs/luci-static/resources/view/athena/templates.js",
+    "packages/athena-runtime/files/usr/lib/athena/templates.sh",
+    "packages/athena-runtime/files/usr/share/athena/templates/global.dae.tpl",
+    "packages/athena-runtime/files/usr/share/athena/templates/dns.dae.tpl",
+    "packages/athena-runtime/files/usr/share/athena/templates/routing.dae.tpl",
+    "packages/athena-runtime/files/usr/share/athena/rules/steam-direct-domains.txt",
+    "packages/athena-runtime/files/usr/share/athena/rules/steam-proxy-domains.txt",
+    "packages/athena-runtime/files/usr/share/athena/rules/xbox-direct-domains.txt",
+    "packages/athena-runtime/files/usr/share/athena/rules/xbox-proxy-domains.txt",
+    "scripts/verify_templates.py",
+    "tests/test_templates.py",
+)
+RETIRED_TEMPLATE_TOKENS = (
+    "/usr/share/athena/templates",
+    "/usr/share/athena/rules",
+    "verify_templates.py",
+    "templates.sh",
+    "athena_render_templates",
+)
+
 
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument("--root",default="."); root=Path(ap.parse_args().root)
@@ -43,6 +64,21 @@ def main():
       *DASHBOARD_FILES]
     missing=[p for p in required if not (root/p).is_file()]
     if missing: raise SystemExit("missing: "+", ".join(missing))
+
+    retired = [p for p in RETIRED_TEMPLATE_PATHS if (root / p).exists()]
+    if retired:
+        raise SystemExit("retired template artifacts remain: " + ", ".join(retired))
+
+    for package in (root / "packages").rglob("*"):
+        if not package.is_file():
+            continue
+        try:
+            text = package.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for token in RETIRED_TEMPLATE_TOKENS:
+            if token in text:
+                raise SystemExit(f"retired template reference remains: {package.relative_to(root)}: {token}")
 
     assembly=(root/"scripts/assemble_daed_source.sh").read_text(encoding="utf-8")
     if "scripts/install_daed_web.py" not in assembly:

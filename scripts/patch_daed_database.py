@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -87,11 +89,58 @@ def patch_state(source: str, anchor: str, patch: str, path: Path) -> bool:
     )
 
 
-def write_source(path: Path, source: str) -> None:
+def stage_source(path: Path, source: str) -> Path:
     try:
-        path.write_text(source, encoding="utf-8", newline="\n")
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{path.name}.", suffix=".tmp", dir=path.parent
+        )
+        with os.fdopen(descriptor, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(source)
+        return Path(temporary_name)
     except (OSError, UnicodeError) as exc:
-        raise RuntimeError(f"unable to write patched source file {path}: {exc}") from exc
+        raise RuntimeError(f"unable to stage patched source file {path}: {exc}") from exc
+
+
+def replace_sources_atomically(
+    db_path: Path,
+    mutation_path: Path,
+    db_source: str,
+    patched_db: str,
+    patched_mutation: str,
+) -> None:
+    """Stage both files before replacing either, restoring on a later failure."""
+    temporary_paths: list[Path] = []
+    db_replaced = False
+    try:
+        patched_db_path = stage_source(db_path, patched_db)
+        temporary_paths.append(patched_db_path)
+        patched_mutation_path = stage_source(mutation_path, patched_mutation)
+        temporary_paths.append(patched_mutation_path)
+        db_backup_path = stage_source(db_path, db_source)
+        temporary_paths.append(db_backup_path)
+
+        os.replace(patched_db_path, db_path)
+        temporary_paths.remove(patched_db_path)
+        db_replaced = True
+        os.replace(patched_mutation_path, mutation_path)
+        temporary_paths.remove(patched_mutation_path)
+    except OSError as exc:
+        if db_replaced:
+            try:
+                os.replace(db_backup_path, db_path)
+                temporary_paths.remove(db_backup_path)
+            except (OSError, ValueError) as rollback_exc:
+                raise RuntimeError(
+                    f"unable to replace both patched source files and restore {db_path}: "
+                    f"{rollback_exc}"
+                ) from exc
+        raise RuntimeError(f"unable to replace both patched source files: {exc}") from exc
+    finally:
+        for temporary_path in temporary_paths:
+            try:
+                temporary_path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def patch_source(source_root: Path) -> None:
@@ -111,8 +160,13 @@ def patch_source(source_root: Path) -> None:
 
     patched_db = db_source.replace(DB_ANCHOR, DB_PATCH, 1)
     patched_mutation = mutation_source.replace(MUTATION_ANCHOR, MUTATION_PATCH, 1)
-    write_source(db_path, patched_db)
-    write_source(mutation_path, patched_mutation)
+    replace_sources_atomically(
+        db_path,
+        mutation_path,
+        db_source,
+        patched_db,
+        patched_mutation,
+    )
 
 
 def main() -> int:

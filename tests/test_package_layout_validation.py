@@ -15,6 +15,8 @@ DASHBOARD_FILES = (
     "packages/luci-app-athena/root/usr/share/luci/menu.d/zz-athena-dashboard.json",
 )
 
+RETIRED_TEMPLATE_PATH = "packages/athena-runtime/files/usr/share/athena/templates/global.dae.tpl"
+
 
 def write_minimum_layout(root: Path, runtime_makefile: str, luci_makefile: str) -> None:
     files = {
@@ -197,6 +199,24 @@ class PackageLayoutValidationTests(unittest.TestCase):
 
             self.assertNotEqual(result.returncode, 0, result.stdout)
             self.assertIn("install_daed_web.py", result.stdout)
+
+    def test_rejects_retired_template_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            write_minimum_layout(
+                root,
+                "$(eval $(call BuildPackage,athena-runtime))\n",
+                "# call BuildPackage - OpenWrt buildroot signature\n"
+                "include $(TOPDIR)/feeds/luci/luci.mk\n",
+            )
+            retired = root / RETIRED_TEMPLATE_PATH
+            retired.parent.mkdir(parents=True)
+            retired.write_text("obsolete\n", encoding="utf-8")
+
+            result = validate(root)
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(RETIRED_TEMPLATE_PATH, result.stdout)
 
 
 if __name__ == "__main__":

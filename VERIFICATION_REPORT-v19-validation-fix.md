@@ -45,3 +45,36 @@ The complete OpenWrt firmware build is intentionally performed by GitHub
 Actions. A new Actions run is still required to prove the Ubuntu runner and
 the multi-hour firmware compilation. If validation fails again, the Artifact
 will preserve the complete validation transcript and the exact failed tests.
+
+## Task 1 runtime baseline audit (2026-08-13)
+
+Initial `git diff`/`git status --short` audit found dirty changes in the
+workflow, DAED recovery implementation, runtime runner, DAED recovery test,
+this report, the change summary, and `tests/test_runtime_runner.py`. The
+workflow's source-validation-artifact collection is outside this task and is
+deliberately left unstaged.
+
+The baseline runner (`b7bfbd0`) was executed against a temporary fixture with
+`test_daed_recovery.sh` failing and a later sentinel test. It returned 1 but
+ran the sentinel, printed only a count, and omitted the failing path. This
+proves the regression test fails against the pre-fix behavior.
+
+The runner now captures each child status immediately outside `if !`, reports
+`FAIL: <test> (exit <status>)`, and exits before later tests. It prints exactly
+one `PASS: all runtime tests` marker only after all runtime tests, the pinned
+Python test, and the packaged-shell syntax checks succeed. The regression
+fixture exercises both `bash` and `sh`, and also verifies Python discovery
+with an unset `PYTHON` environment.
+
+The forced signal fixture runs recovery in its background child and leaves the
+fixture EXIT trap disabled until `wait` reaps that child. This prevents a
+trap-restoration race. The existing production change from a nested subshell
+to the signal-owning recovery process is retained because the forced test
+reproduces `signal_restore` before that change and passes with it.
+
+Task 1 checks:
+
+- `python -m unittest -v tests.test_runtime_runner`: 4 passed.
+- `ATHENA_FORCE_SIGNAL_TEST=1 ATHENA_RUNTIME_TEST_SHELL=bash bash scripts/test_runtime_scripts.sh`: 11 runtime tests, 0 failed; one final success marker.
+- `ATHENA_FORCE_SIGNAL_TEST=1 ATHENA_RUNTIME_TEST_SHELL=sh sh scripts/test_runtime_scripts.sh`: 11 runtime tests, 0 failed; one final success marker.
+- `git diff --check`: passed.

@@ -227,4 +227,41 @@ do
 	printf '%s' "$missing" | grep -Fq "$token" || fail "missing-data contract lacks $token"
 done
 
+cat >"$MOCK_BIN/ubus" <<'EOF'
+#!/bin/sh
+case "$*" in
+	*"network.interface.wan status"*) echo '{"up":true,"l3_device":"eth1","ipv4-address":[],"ipv6-address":[]}' ;;
+	*"network.interface.wan6 status"*) echo '{"up":false,"ipv6-address":[{"address":"fe80::1"}],"route":[]}' ;;
+	*) echo '{}' ;;
+esac
+EOF
+cat >"$MOCK_BIN/ip" <<'EOF'
+#!/bin/sh
+case "$*" in
+	*"addr show scope global"*) echo 'inet6 240e:1234::2/64 scope global dynamic' ;;
+	*) exit 1 ;;
+esac
+EOF
+chmod +x "$MOCK_BIN/ubus" "$MOCK_BIN/ip"
+global_ipv6="$(athena_dashboard_json)"
+printf '%s' "$global_ipv6" | grep -Fq '"ipv6":true' ||
+	fail 'global IPv6 address must report connected even when wan6 is unavailable'
+
+cat >"$MOCK_BIN/ip" <<'EOF'
+#!/bin/sh
+case "$*" in
+	*"route show default"*) echo 'default via fe80::1 dev eth1 proto ra' ;;
+	*) exit 1 ;;
+esac
+EOF
+chmod +x "$MOCK_BIN/ip"
+default_route_ipv6="$(athena_dashboard_json)"
+printf '%s' "$default_route_ipv6" | grep -Fq '"ipv6":true' ||
+	fail 'IPv6 default route must report connected when address probes fail'
+
+rm -f "$MOCK_BIN/ip"
+link_local_only="$(athena_dashboard_json)"
+printf '%s' "$link_local_only" | grep -Fq '"ipv6":false' ||
+	fail 'link-local IPv6 address must not report public IPv6 connectivity'
+
 printf 'PASS: dashboard\n'

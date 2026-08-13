@@ -75,6 +75,11 @@ athena-health --verbose
 
 不要把专用目录交给这两个命令，也不要手工复制、移动、删除、重建或清空 `wing.db`。
 需要恢复时，请重新运行受支持的恢复命令，等待后续提供受支持的恢复工具，或保留专用
-备份目录并联系维护支持。配置模板和规则文件仍作为固件内部参考保留在
-`/usr/share/athena/`，但模板导入工作流已经退役：用户不需要导入模板，`athena-setup`
-也不会生成或等待导入它们。
+备份目录并联系维护支持。
+
+## Native UI configuration
+
+Use the original DAED UI at `/athena-daed/` (LuCI: Services → Athena → DAED
+Panel) to manage subscriptions, nodes, DNS, and routing. Do not directly edit
+`wing.db`, and never use a browser to connect to port `2023`; it is loopback
+only at `127.0.0.1:2023`.
