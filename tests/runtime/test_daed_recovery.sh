@@ -136,8 +136,8 @@ reset_fixture; rm -f "$ROOT/etc/daed/wing.db"; run_recovery 'RESET DAED PASSWORD
 [ ! -s "$ATHENA_RECOVERY_TEST_LOG" ] || fail missing_db_stop
 printf 'database\n' >"$ROOT/etc/daed/wing.db"
 
-case "$(uname -s 2>/dev/null || true)" in
-MINGW*|MSYS*) : ;; # Git-for-Windows does not forward TERM through nested sh command substitutions.
+case "$(uname -s 2>/dev/null || true):${ATHENA_FORCE_SIGNAL_TEST:-0}" in
+MINGW*:0|MSYS*:0) : ;; # Opt in locally; Linux CI always exercises this path.
 *)
 	reset_fixture; export DAED_RESET_SLEEP=20
 	athena_daed_reset_password 'RESET DAED PASSWORD' >"$ROOT/signal.out" 2>"$ROOT/signal.err" & signal_pid=$!

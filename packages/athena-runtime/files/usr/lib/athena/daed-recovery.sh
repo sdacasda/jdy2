@@ -99,7 +99,7 @@ athena_daed_recovery_parse_output() {
 	[ "$athena_daed_recovery_count" -eq 1 ]
 }
 
-athena_daed_reset_password() (
+athena_daed_reset_password() {
 	[ "${1:-}" = 'RESET DAED PASSWORD' ] || { athena_daed_recovery_json_error 'confirmation phrase is required'; exit 1; }
 	umask 077
 	athena_daed_recovery_locked=0 athena_daed_recovery_was_running=0 athena_daed_recovery_emitted=0
@@ -164,4 +164,4 @@ athena_daed_reset_password() (
 	athena_daed_recovery_status=$?
 	unset athena_daed_recovery_output athena_daed_recovery_username athena_daed_recovery_password
 	exit "$athena_daed_recovery_status"
-)
+}
