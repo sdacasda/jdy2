@@ -46,14 +46,17 @@ jobs:
         id: validate
         run: |
           set -euo pipefail
-          python3 -m unittest discover -s tests -p 'test_*.py' -v
-          node tests/js/test_dashboard_chart.js
-          bash scripts/test_runtime_scripts.sh
-          python3 scripts/verify_project.py --root .
-          python3 scripts/verify_templates.py --templates packages/athena-runtime/files/usr/share/athena/templates --rules packages/athena-runtime/files/usr/share/athena/rules
-          python3 scripts/verify_package_layout.py --root .
-          python3 scripts/verify_web_config.py --root .
-          python3 scripts/security_check.py --root .
+          mkdir -p source-validation
+          {
+            python3 -m unittest discover -s tests -p 'test_*.py' -v
+            node tests/js/test_dashboard_chart.js
+            ATHENA_RUNTIME_TEST_SHELL=bash bash scripts/test_runtime_scripts.sh
+            python3 scripts/verify_project.py --root .
+            python3 scripts/verify_templates.py --templates packages/athena-runtime/files/usr/share/athena/templates --rules packages/athena-runtime/files/usr/share/athena/rules
+            python3 scripts/verify_package_layout.py --root .
+            python3 scripts/verify_web_config.py --root .
+            python3 scripts/security_check.py --root .
+          } 2>&1 | tee source-validation/source-validation.log
       - name: Install build dependencies
         run: |
           sudo apt-get update
@@ -199,6 +202,9 @@ jobs:
           fi
           if [ -d daed-source-provenance ]; then
             cp -a daed-source-provenance "$OUTPUT/diagnostics/daed-source-provenance"
+          fi
+          if [ -d source-validation ]; then
+            cp -a source-validation "$OUTPUT/diagnostics/source-validation"
           fi
       - uses: actions/upload-artifact@v6
         if: always()
