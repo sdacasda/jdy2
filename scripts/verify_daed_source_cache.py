@@ -12,7 +12,7 @@ import sys
 import tarfile
 from pathlib import Path, PurePosixPath
 
-from install_daed_web import FORBIDDEN_WEB_LEAK_TOKENS, inspect_archive
+from install_daed_web import inspect_archive, unsafe_login_error_marker
 
 
 ENDPOINT = b"/athena-daed/graphql"
@@ -128,9 +128,11 @@ def verify_archive_contents(archive: Path) -> str:
                 if not member.name.startswith(web_prefix):
                     continue
                 embedded_asset = read_member(bundle, member)
-                if any(token in embedded_asset for token in FORBIDDEN_WEB_LEAK_TOKENS):
+                marker = unsafe_login_error_marker(embedded_asset)
+                if marker is not None:
                     raise RuntimeError(
-                        "embedded Web bundle contains unsafe login error content"
+                        "embedded Web bundle contains unsafe login error content: "
+                        f"{marker} in {member.name}"
                     )
                 if ENDPOINT in embedded_asset:
                     embedded = True

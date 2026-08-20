@@ -27,6 +27,7 @@ class DaedSourceAssemblyTests(unittest.TestCase):
         static_endpoint: bytes = b"/athena-daed/graphql",
         include_static_css: bool = True,
         database_patched: bool = True,
+        embedded_runtime: bytes = b"",
     ):
         source_endpoint = b"/athena-daed/graphql"
         embedded_value = source_endpoint if embedded_endpoint else b"/graphql"
@@ -59,7 +60,8 @@ class DaedSourceAssemblyTests(unittest.TestCase):
             ),
             "daed-2026.07.26/wing/webrender/web/index.html": b"<html></html>\n",
             "daed-2026.07.26/wing/webrender/web/assets/app.js.gz": gzip.compress(
-                b"const endpoint='" + embedded_value + b"';", mtime=0
+                b"const endpoint='" + embedded_value + b"';" + embedded_runtime,
+                mtime=0,
             ),
         }
         if include_static_css:
@@ -147,6 +149,67 @@ class DaedSourceAssemblyTests(unittest.TestCase):
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("embedded Web bundle", result.stderr)
+
+    def test_cache_verifier_accepts_graphql_runtime_identifiers_when_not_rendered(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = root / "daed-src-test.tar.gz"
+            manifest = root / "assembly-manifest.json"
+            self._write_cache_archive(
+                archive,
+                embedded_runtime=(
+                    b"class ClientError extends Error{};"
+                    b"const request={variables:{username:'admin'},body:'query Token'};"
+                    b"console.warn('GraphQL retry scheduled');"
+                ),
+            )
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts/verify_daed_source_cache.py"),
+                    "--archive", str(archive),
+                    "--manifest", str(manifest),
+                    "--cache-id", "cache-v1",
+                    "--pin", "DAED_COMMIT=" + "a" * 40,
+                    *VALID_PATCH_PIN_ARGUMENTS,
+                    "--write",
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_cache_verifier_rejects_credential_sentinel_in_embedded_bundle(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = root / "daed-src-test.tar.gz"
+            manifest = root / "assembly-manifest.json"
+            sentinel = b"SENTINEL_" + b"DAED_PASSWORD_DO_NOT_RENDER"
+            self._write_cache_archive(
+                archive,
+                embedded_runtime=sentinel,
+            )
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts/verify_daed_source_cache.py"),
+                    "--archive", str(archive),
+                    "--manifest", str(manifest),
+                    "--cache-id", "cache-v1",
+                    "--pin", "DAED_COMMIT=" + "a" * 40,
+                    *VALID_PATCH_PIN_ARGUMENTS,
+                    "--write",
+                ],
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("credential sentinel", result.stderr)
+            self.assertNotIn(sentinel.decode("ascii"), result.stderr)
 
     def test_cache_verifier_rejects_static_web_tree_hash_mismatch(self):
         with tempfile.TemporaryDirectory() as directory:

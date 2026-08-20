@@ -17,11 +17,12 @@ FORBIDDEN_WEB_LEAK_TOKENS = (
     b"toast.error((err as Error).message)",
     b"JSON.stringify(error)",
     b"JSON.stringify(err)",
-    b"console.error",
-    b"console.warn",
-    b"request.variables",
-    b"request.body",
-    b"ClientError",
+)
+
+LEGITIMATE_GRAPHQL_RUNTIME = (
+    b"class ClientError extends Error{};"
+    b"const request={variables:{username:'admin'},body:'query Token'};"
+    b"console.warn('GraphQL retry scheduled');"
 )
 
 
@@ -241,6 +242,21 @@ class DaedStaticWebTests(unittest.TestCase):
                     root / "provenance.json",
                     "unsafe login error content",
                 )
+
+    def test_accepts_graphql_client_runtime_identifiers_when_they_are_not_rendered(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            files = self._files()
+            files["assets/index-abc.js"] += b"\n" + LEGITIMATE_GRAPHQL_RUNTIME
+            archive = root / "source.tar.gz"
+            destination = root / "destination"
+            provenance = root / "provenance.json"
+            self._write_archive(archive, files=files)
+
+            result = self._run(archive, destination, provenance)
+
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertTrue((destination / "assets/index-abc.js").is_file())
 
     def test_rejects_error_leaks_outside_javascript(self):
         with tempfile.TemporaryDirectory() as directory:

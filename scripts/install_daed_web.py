@@ -23,16 +23,12 @@ FORBIDDEN_BROWSER_ENDPOINTS = (
     b"127.0.0.1:2023",
     b"192.168.50.1:2023",
 )
-FORBIDDEN_WEB_LEAK_TOKENS = (
-    b"SENTINEL_DAED_PASSWORD_DO_NOT_RENDER",
-    b"toast.error(err.message)",
-    b"toast.error((err as Error).message)",
-    b"JSON.stringify(error)",
-    b"JSON.stringify(err)",
-    b"console.",
-    b"request.variables",
-    b"request.body",
-    b"ClientError",
+FORBIDDEN_WEB_LEAK_MARKERS = (
+    ("credential sentinel", b"SENTINEL_DAED_PASSWORD_DO_NOT_RENDER"),
+    ("raw error message toast", b"toast.error(err.message)"),
+    ("raw typed error message toast", b"toast.error((err as Error).message)"),
+    ("serialized error object", b"JSON.stringify(error)"),
+    ("serialized caught error", b"JSON.stringify(err)"),
 )
 MAX_STATIC_FILE_SIZE = 64 * 1024 * 1024
 ASSET_REFERENCE = re.compile(r"(?:src|href)=[\"']([^\"']+)[\"']", re.I)
@@ -41,6 +37,22 @@ IMAGE_SUFFIXES = {".avif", ".gif", ".ico", ".jpeg", ".jpg", ".png", ".svg", ".we
 
 def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def unsafe_login_error_marker(data: bytes) -> str | None:
+    """Return a safe rule name for an actual browser-visible error leak.
+
+    GraphQL client bundles legitimately contain identifiers such as ClientError,
+    request.variables, request.body, and console methods.  Their presence alone
+    does not mean the login error is rendered.  The pinned Setup.tsx source is
+    checked separately and exactly before the bundle is built, while this layer
+    rejects only concrete rendering/serialization patterns and the credential
+    sentinel.
+    """
+    return next(
+        (name for name, token in FORBIDDEN_WEB_LEAK_MARKERS if token in data),
+        None,
+    )
 
 
 def normalized_member_path(name: str) -> PurePosixPath:
@@ -177,9 +189,12 @@ def inspect_archive(archive: Path) -> dict[str, object]:
         raise RuntimeError("DAED static Web contains a browser-visible DAED port")
     if GRAPHQL_ENDPOINT not in browser_assets:
         raise RuntimeError("DAED static Web is missing the same-origin GraphQL endpoint")
-    shipped_assets = b"\n".join(payloads.values())
-    if any(value in shipped_assets for value in FORBIDDEN_WEB_LEAK_TOKENS):
-        raise RuntimeError("DAED static Web contains unsafe login error content")
+    for path, payload in payloads.items():
+        marker = unsafe_login_error_marker(payload)
+        if marker is not None:
+            raise RuntimeError(
+                f"DAED static Web contains unsafe login error content: {marker} in {path}"
+            )
 
     return {
         "record": _tree_record(archive, root, payloads),
