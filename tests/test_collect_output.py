@@ -37,6 +37,8 @@ class CollectOutputTests(unittest.TestCase):
         result = subprocess.run(
             [str(BASH), "scripts/collect_output.sh", (relative_root / "openwrt").as_posix(), (relative_root / "artifact").as_posix()],
             text=True,
+            encoding="utf-8",
+            errors="replace",
             capture_output=True,
             check=False,
             cwd=ROOT,

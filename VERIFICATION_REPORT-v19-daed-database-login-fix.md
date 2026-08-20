@@ -1,102 +1,92 @@
-# DAED Database Login Repair — Local Verification Report
+# DAED 数据库登录修复 — 本地验证报告
 
-Date: 2026-08-13
+日期：2026-08-20
+分支：`v19-rc1`
+已验证实现快照：`9fddb91`（其后的报告提交只更新交付文档）
+生产版本元数据：`v19.0.0-rc2`
 
-Source snapshot reviewed: `d6af7db` on development branch `v19-rc1`;
-production metadata identifies the release candidate as `v19.0.0-rc2`.
+## 已执行并通过
 
-## Executed: Python discovery
-
-Initial runs before the targeted verification-fixture alignment:
-
-| Command | Exit | Result |
-| --- | ---: | --- |
-| `C:\\Users\\mayib\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe -m unittest discover -v` | 1 | FAIL: `Ran 0 tests`; default discovery did not enter `tests/`. |
-| `C:\\Users\\mayib\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe -m unittest discover -s tests -v` | 1 | 143 run: 138 passed, 4 failed, 1 skipped (Node unavailable). |
-| `... -m unittest discover -s tests -p test_artifact_layout.py -v` | 1 | Minimal reproduction: 1 passed, 3 failed. The tests invoke `collect_output.sh` without the now-required stage-outcomes file and assert pre-fail-closed output text. |
-| `... -m unittest discover -s tests -p test_runtime_runner.py -v` | 1 | Minimal reproduction: 3 passed, 1 failed. The test expects a removed workflow `cp -a source-validation ...` statement. |
-
-The targeted fixup changed tests only: artifact fixtures now provide exactly
-seven prerequisite outcomes, failed-outcome coverage asserts diagnostic-only
-fail-closed behavior, the workflow assertion follows current validation and
-provenance log paths, and `tests/__init__.py` enables default discovery.
-
-Post-fix verification:
-
-| Command | Exit | Result |
-| --- | ---: | --- |
-| `python -m unittest -v tests.test_artifact_layout tests.test_runtime_runner` | 0 | 8 passed, 0 failed, 0 skipped. |
-| `python -m unittest discover -v` | 0 | 143 run: 142 passed, 0 failed, 1 skipped because Node.js is unavailable locally; CI installs Node and runs that behavior test. |
-
-The one skipped Node-dependent behavior test was then executed separately with
-the bundled local Node.js runtime and passed: 1 run, 1 passed, 0 skipped.
-
-No product code was modified by this alignment.
-
-## Executed: runtime suites
-
-Both commands used Git for Windows with
-`PATH=/usr/bin:/bin:$PATH`,
-`PYTHON=/c/Users/mayib/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/python.exe`,
-and `ATHENA_FORCE_SIGNAL_TEST=1` to exercise the MSYS signal path.
-
-| Command | Exit | Result |
-| --- | ---: | --- |
-| `ATHENA_RUNTIME_TEST_SHELL=bash bash scripts/test_runtime_scripts.sh` | 124 | The host wrapper timed out after 126.2 seconds, but output showed all 11 runtime tests passed, all packaged-shell syntax checks passed, `Runtime tests: 11 run, 0 failed`, one `PASS: all runtime tests`, and trailing Python tests `Ran 5 tests ... OK`. |
-| `ATHENA_RUNTIME_TEST_SHELL=sh sh scripts/test_runtime_scripts.sh` | 124 | The host wrapper timed out after 122.3 seconds, but output showed the same complete 11-test/syntax/success sequence and trailing Python `5 ... OK`. |
-
-An ordinary Git-Bash `echo` probe exited normally. An earlier direct `sh.exe`
-attempt failed before tests because a Windows PATH override hid `dirname`; the
-corrected `sh.exe -c 'export PATH=/usr/bin:/bin:$PATH; exec sh ...'` command is
-the result recorded above. Because neither runtime parent returned normally,
-these suites are **executed but timed out**, not reported as PASS despite their
-complete passing test output.
-
-## Executed: static validation
-
-All commands below exited 0.
-
-| Command | Output summary |
+| 验证 | 结果 |
 | --- | --- |
-| `python .../verify_project.py --root .` | `PASS: Athena v19 project structure is valid` |
-| `python .../verify_package_layout.py --root .` | `PASS: package layout` |
-| `python .../verify_web_config.py --root .` | `PASS: web configuration` |
-| `python .../security_check.py --root .` | `PASS: no public-source credential patterns found` |
-| `python -m json.tool PROJECT.json` | valid JSON |
-| `python -m json.tool SOURCES.lock.json` | valid JSON |
-| `bash -n scripts/*.sh` | syntax check passed |
+| 完整 Python discovery（进程内加入 bundled Node.js） | `145` 个测试，`0` failure，`0` error，`0` skipped |
+| DAED SQLite 补丁、组装与缓存绑定 | `17` 个测试通过 |
+| DAED Web 脱敏与完整静态 UI | `21` 个测试通过；Node 行为测试亦在完整矩阵中执行 |
+| LuCI、恢复入口与运行时 runner | `15` 个测试通过 |
+| 同源 UI、三态语义、nginx 和静态 UI | `35` 个测试通过 |
+| 模板删除、包布局与项目验证 | `28` 个测试通过；实际生产/工作流路径无模板接线 |
+| 文档与构建脚本 | `13` 个测试通过 |
+| CI、诊断、安全与来源证明 | `30` 个测试通过 |
+| Bash 运行时矩阵 | `11` 个测试，`0` 失败，退出码 `0` |
+| POSIX `sh` 运行时矩阵 | `11` 个测试，`0` 失败，退出码 `0` |
 
-The Python executable in these rows is
-`C:\\Users\\mayib\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\python\\python.exe`.
+完整 Python 命令使用：
 
-## Executed: repository searches and Git audit
+```text
+C:\Users\mayib\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe
+```
 
-| Command | Exit | Result |
-| --- | ---: | --- |
-| `git grep -n -E '/usr/share/athena/(templates|rules)|verify_templates\\.py|templates\\.sh|athena_render_templates|awaiting_import' -- ':!docs/superpowers/**'` | 0 | FAIL against the no-match expectation. Matches are in historical local `.superpowers` task reports, historical root reports, and the new deletion guards/tests/validators that deliberately name retired paths. No packaged template asset was found. |
-| `git grep -n -E '(vless|vmess|trojan|hysteria2|tuic)://|password[^[:alnum:]]*[:=][^[:space:]]+' -- ':!scripts/tests/fixtures/**'` | 0 | Pattern matches were reviewed: plan examples, an explicitly allowed test link, and DAED recovery variable/output labels. No real credential was found. |
-| `git diff --check` | 0 | Passed. |
-| `git status --short` before reports | 0 | Clean. |
-| `git diff --stat HEAD~8..HEAD` | 0 | 43 files changed, 871 insertions, 497 deletions. |
-| `git log --oneline -10` | 0 | Reviewed commits `0a6b42e` through `2498053`; no untracked caches, `.pyc`, extracted artifacts, or prior `dist/` archives were packaged. |
+并在进程内把 bundled Node.js 目录加入 `PATH`，结果为：
 
-## NOT RUN
+```text
+FINAL_PYTHON_TESTS run=145 failures=0 errors=0 skipped=0
+```
 
-- GitHub Actions complete source validation, immutable-source assembly,
-  defconfig, both firmware builds, provenance verification, firmware
-  inspection, artifact collection, and upload: **NOT RUN** (no network/build
-  requested).
-- Initramfs boot, sysupgrade flash, and all real-router checks: **NOT RUN**.
-- Router confirmation that existing `wing.db` is preserved, recovery backup
-  checksums exist, a recovered password works once, `/athena-daed/` renders,
-  the stopped/API-locked UI states behave correctly, and LAN/IPv4/IPv6/IoT/NSS
-  policies remain functional: **NOT RUN**.
+运行时矩阵通过 Git for Windows 执行：
 
-## Conclusion
+```text
+ATHENA_RUNTIME_TEST_SHELL=bash bash scripts/test_runtime_scripts.sh
+ATHENA_RUNTIME_TEST_SHELL=sh sh scripts/test_runtime_scripts.sh
+```
 
-Static validators are clean and sensitive-pattern review found no real
-credential. The Python discovery run passed 142 tests with one Node-dependent
-skip; that skipped test subsequently passed in a separate local Node-enabled
-run. A complete release acceptance result still cannot be claimed because
-both runtime parent commands timed out after reporting all individual checks
-successful, and both build/device validation tracks are not run.
+两轮均输出：
+
+```text
+Runtime tests: 11 run, 0 failed
+PASS: all runtime tests
+```
+
+## 静态验证
+
+以下命令均退出 `0`：
+
+```text
+python scripts/verify_project.py --root .
+python scripts/verify_package_layout.py --root .
+python scripts/verify_web_config.py --root .
+python scripts/security_check.py --root .
+python -m json.tool PROJECT.json
+python -m json.tool SOURCES.lock.json
+bash -n scripts/*.sh
+git diff --check
+```
+
+对应输出包含：
+
+```text
+PASS: Athena v19 project structure is valid
+PASS: package layout
+PASS: web configuration
+PASS: no public-source credential patterns found
+```
+
+## 配置模板移除核查
+
+发布路径 `packages/**`、`.github/workflows/**` 和生产 shell 脚本中不存在模板/rules 渲染接线，所有退役文件均不在 Git 跟踪列表中。全仓宽泛 grep 仍会命中防回归测试、验证器和历史审计文字；这些字符串用于拒绝模板回归，不是可执行功能。`.superpowers/` 已设置 `export-ignore`，不会进入源码 ZIP。
+
+## 安全与行为结论
+
+- 已验证数据库补丁对未知或部分补丁状态 fail-closed，且不会部分写入。
+- 已验证浏览器错误不会渲染密码、GraphQL variables 或序列化异常。
+- 已验证恢复流程使用冷备份、校验和、独占锁、严格解析与原服务状态恢复。
+- 已验证凭据不经 LuCI/rpcd 传递；恢复仅由 root 交互式 CLI 执行。
+- 已验证 DAED 停止时不创建 iframe；运行/API 不可用时仍保留完整同源 UI。
+- 已验证浏览器页面不包含 `192.168.50.1:2023`、`127.0.0.1:2023` 或其他直接端口入口。
+
+## 未执行
+
+- 当前源码提交的 GitHub Actions 完整 LiBwrt 构建：**NOT RUN**。
+- 当前源码提交的 initramfs 真机启动、IPv4/IPv6、IoT SSID、NSS/Wi-Fi、DAED 登录恢复验证：**NOT RUN**。
+- sysupgrade 持久刷写：**NOT RUN**。
+
+因此本报告证明源码级和本地运行时验证通过，但不会把当前源码称为已经完成真机验收的稳定固件。必须先由 GitHub Actions 成功生成 initramfs 与 sysupgrade，再优先启动 initramfs 完成设备验收。

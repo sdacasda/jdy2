@@ -115,6 +115,10 @@ class ProjectValidationTests(unittest.TestCase):
         result = run("scripts/security_check.py", ROOT)
         self.assertEqual(result.returncode, 0, result.stdout)
 
+    def test_source_archive_excludes_internal_superpowers_work_products(self) -> None:
+        attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
+        self.assertIn(".superpowers/ export-ignore", attributes.splitlines())
+
 
 if __name__ == "__main__":
     unittest.main()

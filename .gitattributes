@@ -4,3 +4,4 @@
 *.yml text eol=lf
 *.yaml text eol=lf
 *.config text eol=lf
+.superpowers/ export-ignore
