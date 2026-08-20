@@ -18,6 +18,11 @@ Release metadata is `v19.0.0-rc2`.
 - Documentation explains loopback-only DAED access, recovery constraints,
   password-compromise handling, and the fact that recovery backups are not a
   user-operated database rollback mechanism.
+- Host-side artifact tests now resolve Bash from the current runner instead of
+  assuming `D:/Git/bin/bash.exe`, and preserve the native POSIX `PATH` on
+  GitHub's Ubuntu runner. The legacy `project_check.py` entry point delegates
+  to the authoritative Athena v19 validator instead of checking removed v18
+  workflow and configuration paths.
 
 The accompanying source archive is source-only. It is not firmware and is not
 evidence that an image has been built, tested on hardware, or is flashable.

@@ -94,6 +94,11 @@ class ProjectValidationTests(unittest.TestCase):
         result = run("scripts/verify_project.py", ROOT, "--allow-incomplete")
         self.assertEqual(result.returncode, 0, result.stdout)
 
+    def test_legacy_project_check_uses_the_current_v19_validator(self) -> None:
+        result = run("scripts/project_check.py", ROOT)
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("Athena v19 project structure is valid", result.stdout)
+
     def test_rejects_retired_template_token_in_production_file(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)

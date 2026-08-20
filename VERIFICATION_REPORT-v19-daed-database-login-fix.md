@@ -2,20 +2,20 @@
 
 日期：2026-08-20
 分支：`v19-rc1`
-已验证实现快照：`9fddb91`（其后的报告提交只更新交付文档）
+已验证实现快照：`a2a0c5d`（其后的报告提交只更新交付文档）
 生产版本元数据：`v19.0.0-rc2`
 
 ## 已执行并通过
 
 | 验证 | 结果 |
 | --- | --- |
-| 完整 Python discovery（进程内加入 bundled Node.js） | `145` 个测试，`0` failure，`0` error，`0` skipped |
+| 完整 Python discovery（进程内加入 bundled Node.js） | `148` 个测试，`0` failure，`0` error，`0` skipped |
 | DAED SQLite 补丁、组装与缓存绑定 | `17` 个测试通过 |
 | DAED Web 脱敏与完整静态 UI | `21` 个测试通过；Node 行为测试亦在完整矩阵中执行 |
 | LuCI、恢复入口与运行时 runner | `15` 个测试通过 |
 | 同源 UI、三态语义、nginx 和静态 UI | `35` 个测试通过 |
 | 模板删除、包布局与项目验证 | `28` 个测试通过；实际生产/工作流路径无模板接线 |
-| 文档与构建脚本 | `13` 个测试通过 |
+| 文档与构建脚本 | 包含跨平台 Bash/PATH 与 v19 验证入口回归测试，完整矩阵通过 |
 | CI、诊断、安全与来源证明 | `30` 个测试通过 |
 | Bash 运行时矩阵 | `11` 个测试，`0` 失败，退出码 `0` |
 | POSIX `sh` 运行时矩阵 | `11` 个测试，`0` 失败，退出码 `0` |
@@ -29,7 +29,7 @@ C:\Users\mayib\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\p
 并在进程内把 bundled Node.js 目录加入 `PATH`，结果为：
 
 ```text
-FINAL_PYTHON_TESTS run=145 failures=0 errors=0 skipped=0
+FINAL_PYTHON_TESTS run=148 failures=0 errors=0 skipped=0
 ```
 
 运行时矩阵通过 Git for Windows 执行：
@@ -52,6 +52,7 @@ PASS: all runtime tests
 
 ```text
 python scripts/verify_project.py --root .
+python scripts/project_check.py --root .
 python scripts/verify_package_layout.py --root .
 python scripts/verify_web_config.py --root .
 python scripts/security_check.py --root .
@@ -82,10 +83,14 @@ PASS: no public-source credential patterns found
 - 已验证凭据不经 LuCI/rpcd 传递；恢复仅由 root 交互式 CLI 执行。
 - 已验证 DAED 停止时不创建 iframe；运行/API 不可用时仍保留完整同源 UI。
 - 已验证浏览器页面不包含 `192.168.50.1:2023`、`127.0.0.1:2023` 或其他直接端口入口。
+- 已验证 `collect_output` 测试从 Ubuntu runner 的 `PATH` 解析 Bash，且不会
+  把 Windows Git 路径或分隔符写入 POSIX `PATH`。
+- 已验证兼容入口 `project_check.py` 使用当前 v19 验证规则，不再读取已删除的
+  v18 `athena-final-candidate` 文件。
 
 ## 未执行
 
-- 当前源码提交的 GitHub Actions 完整 LiBwrt 构建：**NOT RUN**。
+- 修复后的当前源码提交尚未重新执行 GitHub Actions 完整 LiBwrt 构建：**NOT RUN**。
 - 当前源码提交的 initramfs 真机启动、IPv4/IPv6、IoT SSID、NSS/Wi-Fi、DAED 登录恢复验证：**NOT RUN**。
 - sysupgrade 持久刷写：**NOT RUN**。
 

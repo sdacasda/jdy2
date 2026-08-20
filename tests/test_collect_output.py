@@ -1,12 +1,40 @@
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-BASH = Path("D:/Git/bin/bash.exe")
+
+
+def resolve_bash() -> str:
+    resolved = shutil.which("bash")
+    if resolved:
+        return resolved
+
+    if os.name == "nt":
+        for candidate in (
+            Path("D:/Git/bin/bash.exe"),
+            Path("C:/Program Files/Git/bin/bash.exe"),
+        ):
+            if candidate.is_file():
+                return str(candidate)
+
+    raise RuntimeError("bash is required to run collect_output.sh tests")
+
+
+def collect_subprocess_env(*, platform_name: str = os.name) -> dict[str, str]:
+    env = os.environ.copy()
+    if platform_name == "nt":
+        git_usr_bin = Path(resolve_bash()).parent.parent / "usr" / "bin"
+        if git_usr_bin.is_dir():
+            env["PATH"] = str(git_usr_bin) + os.pathsep + env.get("PATH", "")
+    return env
+
+
+BASH = resolve_bash()
 
 
 def msys(path: Path) -> str:
@@ -35,7 +63,7 @@ class CollectOutputTests(unittest.TestCase):
         outcome_file.write_text(outcomes, encoding="utf-8")
         relative_root = root.relative_to(ROOT)
         result = subprocess.run(
-            [str(BASH), "scripts/collect_output.sh", (relative_root / "openwrt").as_posix(), (relative_root / "artifact").as_posix()],
+            [BASH, "scripts/collect_output.sh", (relative_root / "openwrt").as_posix(), (relative_root / "artifact").as_posix()],
             text=True,
             encoding="utf-8",
             errors="replace",
@@ -43,8 +71,7 @@ class CollectOutputTests(unittest.TestCase):
             check=False,
             cwd=ROOT,
             env={
-                **os.environ,
-                "PATH": "D:\\Git\\usr\\bin;" + os.environ.get("PATH", ""),
+                **collect_subprocess_env(),
                 "ATHENA_STEP_OUTCOMES": (relative_root / "step-outcomes.txt").as_posix(),
             },
         )
